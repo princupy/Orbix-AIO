@@ -1,6 +1,6 @@
 // In-memory store for recently deleted messages (one per channel).
 
-const MAX_SNIPE_AGE_MS = 5 * 60 * 1000;
+const MAX_SNIPE_AGE_MS = 2 * 60 * 60 * 1000;
 const deletedMessages = new Map();
 
 function storeDeletedMessage(message) {

@@ -111,7 +111,7 @@ function buildNoMessageContainer() {
     .addSeparatorComponents(createSeparator())
     .addTextDisplayComponents(
       new TextDisplayBuilder().setContent(
-        'No recently deleted message found in this channel.\nDeleted messages expire after **5 minutes**.',
+        'No recently deleted message found in this channel.',
       ),
     )
     .addSeparatorComponents(createSeparator())
