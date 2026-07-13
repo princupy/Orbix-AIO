@@ -21,15 +21,19 @@ const HELP_HOME_CUSTOM_ID_PREFIX = 'help:home:';
 const HELP_PAGE_CUSTOM_ID_PREFIX = 'help:page:';
 const PAGE_SIZE = 5;
 
-const CATEGORY_ORDER = ['utility', 'moderation', 'config', 'owner'];
+const CATEGORY_ORDER = ['utility', 'moderation', 'leveling', 'media', 'config', 'owner'];
 const CATEGORY_LABELS = {
   config: 'Config',
+  leveling: 'Leveling',
+  media: 'Media',
   moderation: 'Moderation',
   owner: 'Owner',
   utility: 'Utility',
 };
 const CATEGORY_DESCRIPTIONS = {
   config: 'Server setup commands for prefix and bot configuration.',
+  leveling: 'XP, ranks, leaderboards, reward roles, and leveling settings.',
+  media: 'Media-only channel setup and enforcement tools.',
   moderation: 'Server moderation tools to manage messages and users.',
   owner: 'Bot owner controls for global noprefix access management.',
   utility: 'General bot tools for help, latency, and quick checks.',

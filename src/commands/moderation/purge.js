@@ -21,6 +21,7 @@ const PURGE_CANCEL_CUSTOM_ID_PREFIX = 'purge:cancel:';
 const MAX_PURGE_AMOUNT = 100;
 const MIN_PURGE_AMOUNT = 1;
 const DEFAULT_PURGE_AMOUNT = 10;
+const MEDIA_URL_PATTERN = /https?:\/\/\S+\.(?:png|jpe?g|gif|webp|mp4|mov|webm|m4v|mp3|wav|ogg)(?:[?#]\S*)?/i;
 
 /* ── Reusable helpers (matches existing codebase style) ── */
 
@@ -96,6 +97,10 @@ function buildPurgeMenuContainer({ ownerId, prefix }) {
         .setLabel('Purge Bot Messages')
         .setDescription('Delete messages sent by bots in this channel')
         .setValue('bots'),
+      new StringSelectMenuOptionBuilder()
+        .setLabel('Purge Media Messages')
+        .setDescription('Delete messages containing media only')
+        .setValue('media'),
     );
 
   return new ContainerBuilder()
@@ -112,11 +117,13 @@ function buildPurgeMenuContainer({ ownerId, prefix }) {
         '> **All Messages** — Delete recent messages from everyone',
         '> **User Messages** — Delete messages from a specific user',
         '> **Bot Messages** — Delete messages sent by bots',
+        '> **Media Messages** — Delete messages containing media only',
         '',
         `**Usage:**`,
         `\`${prefix}purge <amount>\` — Purge all messages`,
         `\`${prefix}purge @user <amount>\` — Purge a user's messages`,
         `\`${prefix}purge bots <amount>\` — Purge bot messages`,
+        `\`${prefix}purge media <amount>\` — Purge media messages`,
         '',
         `*Max: **${MAX_PURGE_AMOUNT}** messages per purge | Default: **${DEFAULT_PURGE_AMOUNT}***`,
       ].join('\n')),
@@ -141,6 +148,8 @@ function buildConfirmContainer({ ownerId, mode, amount, targetUserId }) {
     modeLabel = `messages from <@${targetUserId}>`;
   } else if (mode === 'bots') {
     modeLabel = 'bot messages';
+  } else if (mode === 'media') {
+    modeLabel = 'media messages';
   }
 
   return new ContainerBuilder()
@@ -181,6 +190,8 @@ function buildSuccessContainer({ deleted, mode, targetUserId, ownerId }) {
     modeLabel = `from <@${targetUserId}>`;
   } else if (mode === 'bots') {
     modeLabel = 'from bots';
+  } else if (mode === 'media') {
+    modeLabel = 'containing media';
   }
 
   return new ContainerBuilder()
@@ -232,7 +243,24 @@ function parseAmount(raw) {
   return Math.min(num, MAX_PURGE_AMOUNT);
 }
 
-async function performPurge({ channel, amount, targetUserId, botsOnly }) {
+function hasMedia(message) {
+  if (message.attachments?.size > 0 || message.stickers?.size > 0) {
+    return true;
+  }
+
+  if (message.embeds?.some((embed) => (
+    embed.image
+    || embed.thumbnail
+    || embed.video
+    || ['image', 'gifv', 'video'].includes(embed.type)
+  ))) {
+    return true;
+  }
+
+  return MEDIA_URL_PATTERN.test(message.content || '');
+}
+
+async function performPurge({ channel, amount, targetUserId, botsOnly, mediaOnly }) {
   if (targetUserId) {
     /* Fetch more messages so we can filter by user and still reach the requested count */
     const fetched = await channel.messages.fetch({ limit: 100 });
@@ -263,6 +291,21 @@ async function performPurge({ channel, amount, targetUserId, botsOnly }) {
     return deleted.size;
   }
 
+  if (mediaOnly) {
+    /* Fetch messages and filter only media messages */
+    const fetched = await channel.messages.fetch({ limit: 100 });
+    const mediaMessages = fetched
+      .filter((msg) => hasMedia(msg))
+      .first(amount);
+
+    if (mediaMessages.length === 0) {
+      return 0;
+    }
+
+    const deleted = await channel.bulkDelete(mediaMessages, true);
+    return deleted.size;
+  }
+
   const deleted = await channel.bulkDelete(amount, true);
   return deleted.size;
 }
@@ -277,6 +320,8 @@ async function execute({ args, message, prefix }) {
 
   const mentionedUser = message.mentions.users.first();
   const isBotMode = args[0]?.toLowerCase() === 'bots' || args[0]?.toLowerCase() === 'bot';
+  const isMediaMode = ['media', 'medias', 'image', 'images', 'attachment', 'attachments', 'file', 'files']
+    .includes(args[0]?.toLowerCase());
 
   /* LR!purge (no args) → show select menu */
   if (args.length === 0 && !mentionedUser) {
@@ -290,15 +335,18 @@ async function execute({ args, message, prefix }) {
   /* LR!purge <amount> → purge all */
   /* LR!purge @user <amount> → purge user */
   /* LR!purge bots <amount> → purge bot messages */
+  /* LR!purge media <amount> → purge media messages */
   let mode = 'all';
 
   if (mentionedUser) {
     mode = 'user';
   } else if (isBotMode) {
     mode = 'bots';
+  } else if (isMediaMode) {
+    mode = 'media';
   }
 
-  const rawAmount = (mentionedUser || isBotMode)
+  const rawAmount = (mentionedUser || isBotMode || isMediaMode)
     ? args.find((a) => /^\d+$/.test(a)) || String(DEFAULT_PURGE_AMOUNT)
     : args[0];
   const amount = parseAmount(rawAmount);
@@ -312,6 +360,7 @@ async function execute({ args, message, prefix }) {
       amount,
       targetUserId: mentionedUser?.id || null,
       botsOnly: mode === 'bots',
+      mediaOnly: mode === 'media',
     });
 
     await message.channel.send(cv2Payload(buildSuccessContainer({
@@ -360,7 +409,7 @@ async function handleModeSelect({ interaction }) {
     return;
   }
 
-  /* mode === 'all' or 'bots' */
+  /* mode === 'all', 'bots', or 'media' */
   const amount = DEFAULT_PURGE_AMOUNT;
 
   await interaction.update(cv2Payload(buildConfirmContainer({
@@ -394,6 +443,7 @@ async function handleConfirmButton({ interaction }) {
       amount,
       targetUserId,
       botsOnly: mode === 'bots',
+      mediaOnly: mode === 'media',
     });
 
     await interaction.channel.send(cv2Payload(buildSuccessContainer({
@@ -453,8 +503,8 @@ module.exports = {
   name: 'purge',
   aliases: ['prune', 'clear'],
   category: 'moderation',
-  description: 'Purge messages from the channel — all messages or from a specific user.',
-  usage: 'LR!purge [amount] | LR!purge @user [amount]',
+  description: 'Purge messages from the channel — all, user, bot, or media messages.',
+  usage: 'LR!purge [amount] | LR!purge @user [amount] | LR!purge bots [amount] | LR!purge media [amount]',
   execute,
   componentHandlers: [
     {

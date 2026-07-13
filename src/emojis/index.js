@@ -66,6 +66,13 @@ const catalog = {
       animated: true,
     },
   },
+  orbix: {
+    orbix: {
+      name: 'orbix',
+      id: '1525406542277378108',
+      animated: false,
+    }
+  },
 };
 
 function getDefinition(path) {
