@@ -104,8 +104,8 @@ function buildMediaOnlyNoticeContainer({ generalChannel }) {
   const chatTarget = MEDIA_ONLY_WARNING_CHANNEL_ID
     ? ` Please use <#${MEDIA_ONLY_WARNING_CHANNEL_ID}> for normal chat.`
     : generalChannel
-    ? ` Please use ${generalChannel} for normal chat.`
-    : ' Please use the general chat channel for normal chat.';
+      ? ` Please use ${generalChannel} for normal chat.`
+      : ' Please use the general chat channel for normal chat.';
 
   return new ContainerBuilder()
     .addTextDisplayComponents(
@@ -403,10 +403,71 @@ async function processAfk(message, isAfkCommand) {
 
 // ─── Main handler ──────────────────────────────────────────────────
 
+const COMMAND_TIMEOUT_MS = 10_000;
+
+/**
+ * The payload used to replace a timed-out command response.
+ * Shown in-place after COMMAND_TIMEOUT_MS milliseconds.
+ */
+const TIMEOUT_EDIT_PAYLOAD = cv2Payload(
+  new ContainerBuilder().addTextDisplayComponents(
+    new TextDisplayBuilder().setContent('*This response has expired.*'),
+  ),
+  { attachments: [] },
+);
+
 async function processLevelingSafely(message, prefix) {
   return processLevelingMessage(message, prefix).catch((error) => {
     console.warn(`[leveling] Failed to process XP for ${message.author.id} in ${message.guild.id}:`, error);
     return null;
+  });
+}
+
+/**
+ * Returns a Proxy around `message` that, after `delayMs` milliseconds, edits
+ * every command reply / channel.send to show a timeout notice instead of the
+ * original content.  Falls back to deletion if the edit fails.
+ * Only ONE file (this one) needs to change — all commands benefit automatically.
+ */
+function createTimeoutProxy(message, delayMs) {
+  function scheduleTimeout(promise) {
+    return Promise.resolve(promise)
+      .then((sent) => {
+        if (sent) {
+          const t = setTimeout(() => {
+            sent.edit(TIMEOUT_EDIT_PAYLOAD)
+              .catch(() => sent.delete().catch(() => null));
+          }, delayMs);
+          t.unref?.();
+        }
+        return sent;
+      })
+      .catch(() => null);
+  }
+
+  // Proxy for message.channel — intercepts .send()
+  const channelProxy = new Proxy(message.channel, {
+    get(target, prop, receiver) {
+      if (prop === 'send') {
+        return (...args) => scheduleTimeout(Reflect.get(target, prop, receiver).apply(target, args));
+      }
+      const value = Reflect.get(target, prop, receiver);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+
+  // Proxy for message — intercepts .reply() and returns channelProxy for .channel
+  return new Proxy(message, {
+    get(target, prop, receiver) {
+      if (prop === 'reply') {
+        return (...args) => scheduleTimeout(Reflect.get(target, prop, receiver).apply(target, args));
+      }
+      if (prop === 'channel') {
+        return channelProxy;
+      }
+      const value = Reflect.get(target, prop, receiver);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
   });
 }
 
@@ -480,11 +541,14 @@ async function handleMessageCreate(client, message) {
   const isAfkCommand = resolvedCommand.resolvedName === 'afk';
   await processAfk(message, isAfkCommand);
 
+  // Wrap message so all command replies/sends show a timeout notice after COMMAND_TIMEOUT_MS
+  const timedMessage = createTimeoutProxy(message, COMMAND_TIMEOUT_MS);
+
   try {
     await resolvedCommand.command.execute({
       args: resolvedCommand.args,
       client,
-      message,
+      message: timedMessage,
       noPrefix: usedNoPrefix,
       prefix,
       usedPrefix: hasPrefix ? prefix : '',
@@ -497,7 +561,14 @@ async function handleMessageCreate(client, message) {
       description: 'An error occurred while running this command. Check the console logs.',
     });
 
-    await message.reply(cv2Payload(container)).catch(() => null);
+    // Error reply also shows timeout notice
+    const errMsg = await message.reply(cv2Payload(container)).catch(() => null);
+    if (errMsg) {
+      const t = setTimeout(() => {
+        errMsg.edit(TIMEOUT_EDIT_PAYLOAD).catch(() => errMsg.delete().catch(() => null));
+      }, COMMAND_TIMEOUT_MS);
+      t.unref?.();
+    }
   }
 }
 

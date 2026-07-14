@@ -42,6 +42,9 @@ const OPERATION_CONFIG = {
     successTitle: 'Channel Hidden',
     successTitleAll: 'Channels Hidden',
     targetTypes: HIDE_CHANNEL_TYPES,
+    alreadyStateTitle: 'Already Hidden',
+    alreadyStateMessage: 'This channel is already hidden.',
+    alreadyStateTitleAll: 'Already Hidden',
   },
   lock: {
     descriptionAction: 'lock',
@@ -53,6 +56,9 @@ const OPERATION_CONFIG = {
     successTitle: 'Channel Locked',
     successTitleAll: 'Channels Locked',
     targetTypes: LOCK_CHANNEL_TYPES,
+    alreadyStateTitle: 'Already Locked',
+    alreadyStateMessage: 'This channel is already locked.',
+    alreadyStateTitleAll: 'Already Locked',
   },
   unhide: {
     descriptionAction: 'unhide',
@@ -61,6 +67,9 @@ const OPERATION_CONFIG = {
     successTitle: 'Channel Unhidden',
     successTitleAll: 'Channels Unhidden',
     targetTypes: HIDE_CHANNEL_TYPES,
+    alreadyStateTitle: 'Already Visible',
+    alreadyStateMessage: 'This channel is not hidden — it is already visible to members.',
+    alreadyStateTitleAll: 'Already Visible',
   },
   unlock: {
     descriptionAction: 'unlock',
@@ -72,6 +81,9 @@ const OPERATION_CONFIG = {
     successTitle: 'Channel Unlocked',
     successTitleAll: 'Channels Unlocked',
     targetTypes: LOCK_CHANNEL_TYPES,
+    alreadyStateTitle: 'Already Unlocked',
+    alreadyStateMessage: 'This channel is not locked — it is already unlocked.',
+    alreadyStateTitleAll: 'Already Unlocked',
   },
 };
 
@@ -150,6 +162,36 @@ function getTargetChannels(message, operation, allChannels) {
     .sort((left, right) => (left.rawPosition ?? 0) - (right.rawPosition ?? 0));
 }
 
+/**
+ * Check if a channel is already in the desired state for the given operation.
+ * Returns true if the operation would be a no-op (channel already matches target state).
+ */
+function isAlreadyInState(channel, operation, everyoneRole) {
+  const overwrite = channel.permissionOverwrites.cache.get(everyoneRole.id);
+
+  if (operation === 'lock') {
+    // Already locked = @everyone SendMessages is explicitly denied (false)
+    return overwrite?.deny?.has(PermissionsBitField.Flags.SendMessages) === true;
+  }
+
+  if (operation === 'unlock') {
+    // Already unlocked = @everyone SendMessages is NOT explicitly denied
+    return overwrite?.deny?.has(PermissionsBitField.Flags.SendMessages) !== true;
+  }
+
+  if (operation === 'hide') {
+    // Already hidden = @everyone ViewChannel is explicitly denied (false)
+    return overwrite?.deny?.has(PermissionsBitField.Flags.ViewChannel) === true;
+  }
+
+  if (operation === 'unhide') {
+    // Already visible = @everyone ViewChannel is NOT explicitly denied
+    return overwrite?.deny?.has(PermissionsBitField.Flags.ViewChannel) !== true;
+  }
+
+  return false;
+}
+
 function buildMissingUserPermContainer() {
   return new ContainerBuilder()
     .addTextDisplayComponents(
@@ -206,6 +248,55 @@ function buildNoChannelsContainer({
         allChannels
           ? 'I could not find any supported channels to update.'
           : 'This command cannot be used in this channel type.',
+      ),
+    )
+    .addSeparatorComponents(createSeparator())
+    .addActionRowComponents(createDeleteRow(customIdPrefix, ownerId))
+    .addSeparatorComponents(createSeparator())
+    .addTextDisplayComponents(createFooterText());
+}
+
+function buildAlreadyInStateContainer({
+  customIdPrefix,
+  operation,
+  ownerId,
+}) {
+  const config = OPERATION_CONFIG[operation];
+
+  return new ContainerBuilder()
+    .addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(
+        `## ${emojis.label('status.warning', config.alreadyStateTitle)}`,
+      ),
+    )
+    .addSeparatorComponents(createSeparator())
+    .addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(config.alreadyStateMessage),
+    )
+    .addSeparatorComponents(createSeparator())
+    .addActionRowComponents(createDeleteRow(customIdPrefix, ownerId))
+    .addSeparatorComponents(createSeparator())
+    .addTextDisplayComponents(createFooterText());
+}
+
+function buildAlreadyInStateAllContainer({
+  alreadyCount,
+  customIdPrefix,
+  operation,
+  ownerId,
+}) {
+  const config = OPERATION_CONFIG[operation];
+
+  return new ContainerBuilder()
+    .addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(
+        `## ${emojis.label('status.warning', config.alreadyStateTitleAll)}`,
+      ),
+    )
+    .addSeparatorComponents(createSeparator())
+    .addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(
+        `All **${alreadyCount}** channel${alreadyCount === 1 ? ' is' : 's are'} already in the desired state. No changes were made.`,
       ),
     )
     .addSeparatorComponents(createSeparator())
@@ -341,23 +432,54 @@ function createChannelPermissionCommand({
       return;
     }
 
+    const everyoneRole = message.guild.roles.everyone;
     const reason = cleanReason(args.join(' '));
     const auditReason = cleanReason(`${name} used by ${message.author.tag} (${message.author.id}): ${reason}`);
     const failed = [];
     let updated = 0;
+    let alreadySkipped = 0;
+
+    // Single channel — check if already in desired state before doing anything
+    if (!allChannels) {
+      if (isAlreadyInState(targets[0], operation, everyoneRole)) {
+        await message.reply(cv2Payload(buildAlreadyInStateContainer({
+          customIdPrefix: deleteCustomIdPrefix,
+          operation,
+          ownerId,
+        })));
+        return;
+      }
+    }
 
     for (const channel of targets) {
+      // For bulk ops — skip channels already in the desired state
+      if (allChannels && isAlreadyInState(channel, operation, everyoneRole)) {
+        alreadySkipped += 1;
+        continue;
+      }
+
       try {
         await applyOverwrite({
           channel,
           operation,
           reason: auditReason,
-          targetRole: message.guild.roles.everyone,
+          targetRole: everyoneRole,
         });
         updated += 1;
       } catch (error) {
         failed.push({ channel, error });
       }
+    }
+
+    // All channels were already in desired state (bulk only)
+    if (allChannels && updated === 0 && failed.length === 0) {
+      await message.channel.send(cv2Payload(buildAlreadyInStateAllContainer({
+        alreadyCount: alreadySkipped,
+        customIdPrefix: deleteCustomIdPrefix,
+        operation,
+        ownerId,
+      })));
+      return;
     }
 
     if (updated === 0) {
