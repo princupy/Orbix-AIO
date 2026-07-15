@@ -12,6 +12,7 @@ const { getMediaOnlyChannelIds } = require('../supabase/mediaOnlyChannels');
 const { isNoPrefixUser } = require('../supabase/noPrefixUsers');
 const { createNoticeContainer, cv2Payload } = require('../utils/cv2');
 const { processLevelingMessage } = require('../utils/leveling');
+const { resolveSetupRoleCommand } = require('../utils/setupRoles');
 
 const MEDIA_URL_PATTERN = /https?:\/\/\S+\.(?:png|jpe?g|gif|webp|mp4|mov|webm|m4v|mp3|wav|ogg)(?:[?#]\S*)?/i;
 const MEDIA_NOTICE_DELETE_MS = 5000;
@@ -521,6 +522,13 @@ async function handleMessageCreate(client, message) {
   }
 
   resolvedCommand ||= resolveCommand(client, input);
+
+  if (!resolvedCommand) {
+    resolvedCommand = await resolveSetupRoleCommand({
+      input,
+      message,
+    });
+  }
 
   if (!resolvedCommand) {
     if (await enforceMediaOnlyMessage(message)) {

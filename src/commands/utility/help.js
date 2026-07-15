@@ -23,13 +23,14 @@ const HELP_HOME_CUSTOM_ID_PREFIX = `${HELP_COMPONENT_PREFIX}home:`;
 const HELP_PAGE_CUSTOM_ID_PREFIX = `${HELP_COMPONENT_PREFIX}page:`;
 const PAGE_SIZE = 5;
 
-const CATEGORY_ORDER = ['utility', 'moderation', 'voice', 'leveling', 'media', 'config', 'owner'];
+const CATEGORY_ORDER = ['utility', 'moderation', 'voice', 'leveling', 'media', 'setup-roles', 'config', 'owner'];
 const CATEGORY_LABELS = {
   config: 'Config',
   leveling: 'Leveling',
   media: 'Media',
   moderation: 'Moderation',
   owner: 'Owner',
+  'setup-roles': 'Setup Roles',
   utility: 'Utility',
   voice: 'Voice',
 };
@@ -39,6 +40,7 @@ const CATEGORY_DESCRIPTIONS = {
   media: 'Media-only channel setup and enforcement tools.',
   moderation: 'Server moderation tools to manage messages and users.',
   owner: 'Bot owner controls for global noprefix access management.',
+  'setup-roles': 'Guild-specific staff access and named role assignment commands.',
   utility: 'General bot tools for help, latency, and quick checks.',
   voice: 'Mute, deafen, kick, pull, and move users in voice channels.',
 };

@@ -13,6 +13,7 @@ A powerful, all-in-one Discord.js bot built with Components V2 responses, Supaba
 - **Supabase** for persistent guild settings, leveling data, noprefix users, and media channels
 - **Leveling System** — XP gain, rank cards, leaderboards, roles, multipliers, cooldowns, and full admin control
 - **Media-Only Channels** — lock channels to media/attachment-only messages
+- **Setup Roles** — create guild-specific named commands that assign preconfigured roles
 - **Moderation Suite** — ban, kick, mute, lock, hide, nuke, role management, nickname, and more
 - **Utility** — help panel, ping card, avatar/banner viewer, snipe, steal emoji/sticker
 - **Owner Tools** — global noprefix access management with duration controls
@@ -57,6 +58,32 @@ Default prefix: `LR!`
 | Command | Aliases | Description |
 | --- | --- | --- |
 | `LR!setprefix <new-prefix>` | `prefix` | Sets a server-specific bot prefix. Requires Manage Server. |
+
+---
+
+### 🧩 Setup Roles
+
+Setup-role commands let administrators create safe, named role assignment commands for staff.
+
+| Command | Description |
+| --- | --- |
+| `LR!setuprole <@role\|role_id>` | Allows members with this staff role to use dynamic setup-role commands. |
+| `LR!setuprole remove <@role\|role_id>` | Removes a staff access role. |
+| `LR!setuprole list` | Lists configured staff access roles. |
+| `LR!setuprolecreate <name> <@role\|role_id>` | Creates or updates a named role assignment command. |
+| `LR!setuprolecreate remove <name>` | Removes a named role assignment command. |
+| `LR!setuprolecreate list` | Lists all named role assignment commands. |
+| `LR!<name> @user` | Assigns the role mapped to `<name>` to the mentioned user. |
+
+Example:
+
+```text
+LR!setuprole @Staff
+LR!setuprolecreate girl @Girl
+LR!girl @user
+```
+
+Administrators and the configured bot owner bypass the staff access-role requirement. The caller and bot must still satisfy Discord role hierarchy rules.
 
 ---
 
@@ -163,7 +190,7 @@ Notes:
 - `DISCORD_TOKEN` is required.
 - `DEFAULT_PREFIX` defaults to `LR!` when empty.
 - `BOT_OWNER_ID` is required for owner-only commands. Use `BOT_OWNER_IDS` (space or comma separated) for multiple owners.
-- Supabase is required for custom prefixes, leveling data, media channels, and noprefix users.
+- Supabase is required for custom prefixes, leveling data, media channels, setup roles, and noprefix users.
 
 ### 3. Enable Discord intents
 
@@ -179,6 +206,7 @@ src/supabase/SQL/001_guild_settings.sql
 src/supabase/SQL/002_noprefix_users.sql
 src/supabase/SQL/003_media_only_channels.sql
 src/supabase/SQL/004_leveling_system.sql
+src/supabase/SQL/005_setup_roles.sql
 ```
 
 ### 5. Start the bot
@@ -205,6 +233,8 @@ npm run dev
 | Nuke | Manage Channels |
 | Purge | Manage Messages |
 | Role management | Manage Roles |
+| Setup-role configuration | Manage Server and Manage Roles, or Administrator |
+| Dynamic setup-role assignment | Configured staff access role; bot needs Manage Roles |
 | Nickname | Manage Nicknames |
 | Steal emoji/sticker | Manage Expressions |
 | Leveling (rank cards) | Send Messages, Embed Links |
@@ -224,7 +254,9 @@ src/
     media/                  Media-only channel commands
     moderation/             Ban, kick, mute, lock, hide, nuke, purge, snipe, steal, role, etc.
     owner/noprefix/         Owner-only noprefix management
+    setup-roles/            Staff access and dynamic named role command configuration
     utility/                Help, ping, avatar, banner
+    voice/                  Voice moderation and role tools
   emojis/                   Custom emoji registry
   handlers/                 Discord event and command routing
   supabase/                 Database client and data helpers
@@ -244,8 +276,10 @@ src/
 - `src/utils/leveling.js` — Handles XP gain, cooldown, level-up events, and role rewards.
 - `src/utils/channelModerationCommand.js` — Shared logic for lock/hide/unlock/unhide channel operations.
 - `src/utils/mediaOnlyCommand.js` — Shared logic for media-only channel enforcement.
+- `src/utils/setupRoles.js` — Resolves dynamic named role commands and validates access/hierarchy.
 - `src/supabase/leveling.js` — All leveling DB queries (XP, levels, config, leaderboard).
 - `src/supabase/mediaOnlyChannels.js` — Media-only channel DB queries.
+- `src/supabase/setupRoles.js` — Stores and caches setup-role access roles and command mappings.
 - `src/supabase/guildSettings.js` — Stores and caches server prefixes.
 - `src/supabase/noPrefixUsers.js` — Stores, expires, caches, and lists noprefix users.
 
@@ -278,6 +312,7 @@ Commands can also export `componentHandlers` for Components V2 buttons or select
 | --- | --- |
 | `npm start` | Runs the bot via `node src/index.js`. |
 | `npm run dev` | Runs the bot with Node.js watch mode (auto-restart on file change). |
+| `npm test` | Runs the built-in Node.js test suite. |
 
 ---
 
