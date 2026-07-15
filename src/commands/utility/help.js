@@ -12,16 +12,18 @@ const {
   ThumbnailBuilder,
 } = require('discord.js');
 const emojis = require('../../emojis');
+const { loadCommands } = require('../../handlers/commandLoader');
 const { getGuildPrefix } = require('../../supabase/guildSettings');
 const { cv2Payload } = require('../../utils/cv2');
 
-const HELP_CATEGORY_CUSTOM_ID_PREFIX = 'help:category:';
-const HELP_DELETE_CUSTOM_ID_PREFIX = 'help:delete:';
-const HELP_HOME_CUSTOM_ID_PREFIX = 'help:home:';
-const HELP_PAGE_CUSTOM_ID_PREFIX = 'help:page:';
+const HELP_COMPONENT_PREFIX = 'orbix-help:v2:';
+const HELP_CATEGORY_CUSTOM_ID_PREFIX = `${HELP_COMPONENT_PREFIX}category:`;
+const HELP_DELETE_CUSTOM_ID_PREFIX = `${HELP_COMPONENT_PREFIX}delete:`;
+const HELP_HOME_CUSTOM_ID_PREFIX = `${HELP_COMPONENT_PREFIX}home:`;
+const HELP_PAGE_CUSTOM_ID_PREFIX = `${HELP_COMPONENT_PREFIX}page:`;
 const PAGE_SIZE = 5;
 
-const CATEGORY_ORDER = ['utility', 'moderation', 'leveling', 'media', 'config', 'owner'];
+const CATEGORY_ORDER = ['utility', 'moderation', 'voice', 'leveling', 'media', 'config', 'owner'];
 const CATEGORY_LABELS = {
   config: 'Config',
   leveling: 'Leveling',
@@ -29,6 +31,7 @@ const CATEGORY_LABELS = {
   moderation: 'Moderation',
   owner: 'Owner',
   utility: 'Utility',
+  voice: 'Voice',
 };
 const CATEGORY_DESCRIPTIONS = {
   config: 'Server setup commands for prefix and bot configuration.',
@@ -37,6 +40,7 @@ const CATEGORY_DESCRIPTIONS = {
   moderation: 'Server moderation tools to manage messages and users.',
   owner: 'Bot owner controls for global noprefix access management.',
   utility: 'General bot tools for help, latency, and quick checks.',
+  voice: 'Mute, deafen, kick, pull, and move users in voice channels.',
 };
 
 function createSeparator() {
@@ -103,6 +107,29 @@ function getCategoryDescription(category) {
   return CATEGORY_DESCRIPTIONS[category] || 'Commands available in this category.';
 }
 
+function normalizeCategoryValue(value, groupedCommands) {
+  const rawValue = String(value || '').trim();
+
+  if (!rawValue) {
+    return null;
+  }
+
+  if (groupedCommands.has(rawValue)) {
+    return rawValue;
+  }
+
+  const lowerValue = rawValue.toLowerCase();
+
+  if (groupedCommands.has(lowerValue)) {
+    return lowerValue;
+  }
+
+  return [...groupedCommands.keys()].find((category) => (
+    category.toLowerCase() === lowerValue
+    || getCategoryLabel(category).toLowerCase() === lowerValue
+  )) || null;
+}
+
 function getGroupedCommands(client) {
   const commands = [...client.commands.values()]
     .sort((left, right) => {
@@ -122,6 +149,57 @@ function getGroupedCommands(client) {
     groups.set(category, current);
     return groups;
   }, new Map());
+}
+
+function resolveCategorySelection(client, value) {
+  let groupedCommands = getGroupedCommands(client);
+  let category = normalizeCategoryValue(value, groupedCommands);
+
+  if (category) {
+    return {
+      category,
+      groupedCommands,
+      reloaded: false,
+    };
+  }
+
+  loadCommands(client);
+  groupedCommands = getGroupedCommands(client);
+  category = normalizeCategoryValue(value, groupedCommands);
+
+  return {
+    category,
+    groupedCommands,
+    reloaded: true,
+  };
+}
+
+function warnMissingCategory({ groupedCommands, rawCategory, reloaded }) {
+  const availableCategories = [...groupedCommands.keys()].join(', ') || 'none';
+  console.warn(
+    `[help] Category "${rawCategory || 'unknown'}" is not available. `
+    + `Reloaded commands: ${reloaded ? 'yes' : 'no'}. `
+    + `Available categories: ${availableCategories}`,
+  );
+}
+
+function getOrderedCategoryEntries(groupedCommands) {
+  const ordered = [];
+  const seen = new Set();
+
+  for (const category of CATEGORY_ORDER) {
+    const commands = groupedCommands.get(category);
+    if (!commands?.length) continue;
+    ordered.push([category, commands]);
+    seen.add(category);
+  }
+
+  for (const [category, commands] of groupedCommands.entries()) {
+    if (seen.has(category) || !commands?.length) continue;
+    ordered.push([category, commands]);
+  }
+
+  return ordered;
 }
 
 function getPageData(commands, page) {
@@ -146,7 +224,8 @@ function formatCommandNames(commands, startIndex = 0) {
 
 function formatCategoryNames(client) {
   const groupedCommands = getGroupedCommands(client);
-  const names = [...groupedCommands.keys()]
+  const names = getOrderedCategoryEntries(groupedCommands)
+    .map(([category]) => category)
     .map((category) => `> **${getCategoryLabel(category)}**`);
 
   return [
@@ -176,6 +255,15 @@ function formatCommandDetails({
   ].join('\n')).join('\n\n');
 }
 
+function buildSelectOption(category, commands, selectedCategory) {
+  const desc = `${commands.length} command${commands.length === 1 ? '' : 's'} - ${getCategoryDescription(category)}`;
+  return new StringSelectMenuOptionBuilder()
+    .setLabel(getCategoryLabel(category))
+    .setDescription(desc.slice(0, 100)) // Discord hard-limit: 100 chars
+    .setValue(category)
+    .setDefault(category === selectedCategory);
+}
+
 function createCategorySelect({
   client,
   ownerId,
@@ -186,14 +274,8 @@ function createCategorySelect({
     .setCustomId(`${HELP_CATEGORY_CUSTOM_ID_PREFIX}${ownerId}`)
     .setPlaceholder(selectedCategory ? `${getCategoryLabel(selectedCategory)} Commands` : 'Select a category');
 
-  for (const [category, commands] of groupedCommands.entries()) {
-    select.addOptions(
-      new StringSelectMenuOptionBuilder()
-        .setLabel(getCategoryLabel(category))
-        .setDescription(`${commands.length} command${commands.length === 1 ? '' : 's'} - ${getCategoryDescription(category)}`)
-        .setValue(category)
-        .setDefault(category === selectedCategory),
-    );
+  for (const [category, commands] of getOrderedCategoryEntries(groupedCommands)) {
+    select.addOptions(buildSelectOption(category, commands, selectedCategory));
   }
 
   return select;
@@ -413,10 +495,15 @@ async function handleCategorySelect({ client, interaction }) {
     return;
   }
 
-  const category = interaction.values?.[0];
-  const groupedCommands = getGroupedCommands(client);
+  const rawCategory = interaction.values?.[0];
+  const {
+    category,
+    groupedCommands,
+    reloaded,
+  } = resolveCategorySelection(client, rawCategory);
 
-  if (!groupedCommands.has(category)) {
+  if (!category) {
+    warnMissingCategory({ groupedCommands, rawCategory, reloaded });
     await interaction.reply(createEphemeralTextPayload('This command category is not available now.')).catch(() => null);
     return;
   }
@@ -433,16 +520,21 @@ async function handleCategorySelect({ client, interaction }) {
 
 async function handlePageButton({ client, interaction }) {
   const payload = interaction.customId.slice(HELP_PAGE_CUSTOM_ID_PREFIX.length);
-  const [ownerId, category, rawPage] = payload.split(':');
+  const [ownerId, rawCategory, rawPage] = payload.split(':');
 
   if (interaction.user.id !== ownerId) {
     await interaction.reply(createEphemeralTextPayload('Only the panel owner can use these buttons.')).catch(() => null);
     return;
   }
 
-  const groupedCommands = getGroupedCommands(client);
+  const {
+    category,
+    groupedCommands,
+    reloaded,
+  } = resolveCategorySelection(client, rawCategory);
 
-  if (!groupedCommands.has(category)) {
+  if (!category) {
+    warnMissingCategory({ groupedCommands, rawCategory, reloaded });
     await interaction.reply(createEphemeralTextPayload('This command category is not available now.')).catch(() => null);
     return;
   }
@@ -481,6 +573,7 @@ module.exports = {
   aliases: ['h', 'commands'],
   category: 'utility',
   description: 'Shows the bot command help panel.',
+  noTimeout: true, // Help panel has persistent interactive components (dropdowns, buttons)
   usage: 'LR!help',
   execute,
   componentHandlers: [

@@ -1,5 +1,7 @@
 require('dotenv').config({ quiet: true });
 
+const fs = require('fs');
+const path = require('path');
 const {
   ActivityType,
   Client,
@@ -20,6 +22,66 @@ if (!token) {
   console.error('Missing DISCORD_TOKEN in .env');
   process.exit(1);
 }
+
+const INSTANCE_LOCK_FILE = path.join(__dirname, '..', '.orbix-bot.lock');
+
+function isProcessRunning(pid) {
+  const processId = Number(pid);
+
+  if (!Number.isInteger(processId) || processId <= 0 || processId === process.pid) {
+    return false;
+  }
+
+  try {
+    process.kill(processId, 0);
+    return true;
+  } catch (error) {
+    return error?.code === 'EPERM';
+  }
+}
+
+function releaseInstanceLock() {
+  try {
+    const currentLock = JSON.parse(fs.readFileSync(INSTANCE_LOCK_FILE, 'utf8'));
+
+    if (currentLock.pid === process.pid) {
+      fs.rmSync(INSTANCE_LOCK_FILE, { force: true });
+    }
+  } catch {
+    // Ignore stale/missing lock cleanup errors.
+  }
+}
+
+function ensureSingleInstance() {
+  let existingLock = null;
+
+  try {
+    existingLock = JSON.parse(fs.readFileSync(INSTANCE_LOCK_FILE, 'utf8'));
+  } catch {
+    existingLock = null;
+  }
+
+  if (existingLock?.pid && isProcessRunning(existingLock.pid)) {
+    console.error(`Another Orbix bot process is already running (PID ${existingLock.pid}). Stop it before starting this one.`);
+    process.exit(1);
+  }
+
+  fs.writeFileSync(INSTANCE_LOCK_FILE, JSON.stringify({
+    pid: process.pid,
+    startedAt: new Date().toISOString(),
+  }, null, 2));
+
+  process.once('exit', releaseInstanceLock);
+
+  for (const signal of ['SIGINT', 'SIGTERM']) {
+    process.once(signal, () => {
+      releaseInstanceLock();
+      process.exit(0);
+    });
+  }
+}
+
+ensureSingleInstance();
 
 const client = new Client({
   intents: [
@@ -43,6 +105,19 @@ const ACTIVITY_TYPES = {
 };
 
 const STATUS_TYPES = new Set(['dnd', 'idle', 'invisible', 'online']);
+
+function formatCommandCategoryCounts(commands) {
+  const counts = [...commands.values()].reduce((totals, command) => {
+    const category = command.category || 'general';
+    totals.set(category, (totals.get(category) || 0) + 1);
+    return totals;
+  }, new Map());
+
+  return [...counts.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([category, count]) => `${category}:${count}`)
+    .join(', ');
+}
 
 function applyBotPresence(readyClient) {
   const activityText = BOT_PRESENCE.activityText?.trim();
@@ -75,6 +150,7 @@ client.once(Events.ClientReady, (readyClient) => {
   console.log(`Logged in as ${readyClient.user.tag}`);
   console.log(`Default prefix: ${DEFAULT_PREFIX}`);
   console.log(`Loaded commands: ${readyClient.commands.size}`);
+  console.log(`Command categories: ${formatCommandCategoryCounts(readyClient.commands)}`);
   console.log(`Presence: ${BOT_PRESENCE.status} / ${BOT_PRESENCE.activityType} ${BOT_PRESENCE.activityText}`);
 
   cleanupLeftGuildSettings(readyClient.guilds.cache.map((guild) => guild.id))

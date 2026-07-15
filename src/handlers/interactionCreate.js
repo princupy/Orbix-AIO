@@ -1,5 +1,15 @@
 const { createNoticeContainer, cv2Payload } = require('../utils/cv2');
 
+const IGNORED_INTERACTION_ERROR_CODES = new Set([
+  10062, // Unknown Interaction: expired token or old component.
+  40060, // Interaction has already been acknowledged.
+]);
+
+function isIgnoredInteractionError(error) {
+  return IGNORED_INTERACTION_ERROR_CODES.has(error?.code)
+    || IGNORED_INTERACTION_ERROR_CODES.has(error?.rawError?.code);
+}
+
 function findComponentHandler(client, customId) {
   return client.componentHandlers.find((handler) => {
     if (handler.customId && handler.customId === customId) {
@@ -50,6 +60,10 @@ async function handleInteractionCreate(client, interaction) {
       interaction,
     });
   } catch (error) {
+    if (isIgnoredInteractionError(error)) {
+      return;
+    }
+
     console.error(`Component handler failed: ${handler.commandName}`, error);
     await sendInteractionError(interaction);
   }

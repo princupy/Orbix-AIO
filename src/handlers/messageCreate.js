@@ -541,8 +541,11 @@ async function handleMessageCreate(client, message) {
   const isAfkCommand = resolvedCommand.resolvedName === 'afk';
   await processAfk(message, isAfkCommand);
 
-  // Wrap message so all command replies/sends show a timeout notice after COMMAND_TIMEOUT_MS
-  const timedMessage = createTimeoutProxy(message, COMMAND_TIMEOUT_MS);
+  // Wrap message so all command replies/sends show a timeout notice after COMMAND_TIMEOUT_MS.
+  // Commands with noTimeout: true are excluded (e.g. help — it has persistent interactive components).
+  const timedMessage = resolvedCommand.command.noTimeout
+    ? message
+    : createTimeoutProxy(message, COMMAND_TIMEOUT_MS);
 
   try {
     await resolvedCommand.command.execute({
