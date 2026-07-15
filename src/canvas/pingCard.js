@@ -1,4 +1,9 @@
-const { createCanvas } = require('@napi-rs/canvas');
+let createCanvas;
+try {
+  ({ createCanvas } = require('@napi-rs/canvas'));
+} catch (err) {
+  console.warn('[canvas] @napi-rs/canvas failed to load. Ping card will be disabled.', err.message);
+}
 
 const WIDTH = 900;
 const HEIGHT = 360;
@@ -144,6 +149,7 @@ function drawSparkline(ctx, { x, y, width, height, latency, websocket, color }) 
 }
 
 async function createPingCard({ botName, latencyMs, websocketMs }) {
+  if (!createCanvas) return null;
   const latency = Number.isFinite(latencyMs) ? latencyMs : 0;
   const websocket = Number.isFinite(websocketMs) ? websocketMs : 0;
   const color = latencyMs === null ? '#7AA2FF' : getLatencyColor(latency);

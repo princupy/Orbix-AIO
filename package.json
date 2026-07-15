@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
-    "test": "node --test"
+    "test": "node --test",
+    "postinstall": "npm rebuild sharp --ignore-scripts=false || true"
   },
   "engines": {
     "node": ">=18"
@@ -18,5 +19,10 @@
     "discord.js": "^14.26.4",
     "dotenv": "^17.4.2",
     "sharp": "^0.34.5"
+  },
+  "devDependencies": {
+    "ts-node": "^10.9.2",
+    "typescript": "~5.4.5"
   }
 }
+

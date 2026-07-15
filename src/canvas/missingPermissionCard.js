@@ -1,4 +1,9 @@
-const { createCanvas } = require('@napi-rs/canvas');
+let createCanvas;
+try {
+  ({ createCanvas } = require('@napi-rs/canvas'));
+} catch (err) {
+  console.warn('[canvas] @napi-rs/canvas failed to load. Permission card will be disabled.', err.message);
+}
 
 const WIDTH = 900;
 const HEIGHT = 300;
@@ -46,6 +51,7 @@ function drawBadge(ctx, text, x, y, width) {
 }
 
 async function createMissingPermissionCard() {
+  if (!createCanvas) return null;
   const canvas = createCanvas(WIDTH, HEIGHT);
   const ctx = canvas.getContext('2d');
 

@@ -65,6 +65,17 @@ function createFooterText() {
   return new TextDisplayBuilder().setContent(`${poweredEmoji} **Powered by Prince**`);
 }
 
+function buildPingContainerTextOnly({ client, latencyMs }) {
+  return new ContainerBuilder()
+    .addSectionComponents(createTopSection({ client, latencyMs }))
+    .addSeparatorComponents(
+      new SeparatorBuilder()
+        .setDivider(true)
+        .setSpacing(SeparatorSpacingSize.Small),
+    )
+    .addTextDisplayComponents(createFooterText());
+}
+
 function buildPingContainer({ client, latencyMs, filename }) {
   return new ContainerBuilder()
     .addSectionComponents(createTopSection({ client, latencyMs }))
@@ -90,6 +101,12 @@ async function buildPingPayload({ client, latencyMs, requesterId, replaceAttachm
     latencyMs,
     websocketMs: wsPing,
   });
+
+  // canvas is null when @napi-rs/canvas is unavailable on this server
+  if (!canvas) {
+    return cv2Payload(buildPingContainerTextOnly({ client, latencyMs }));
+  }
+
   const attachment = new AttachmentBuilder(canvas, {
     name: filename,
     description: 'Live ping canvas',

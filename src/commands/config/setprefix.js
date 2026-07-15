@@ -135,8 +135,40 @@ function createMissingPermissionGallery(filename) {
 }
 
 async function createMissingPermissionPayload(client) {
-  const filename = `missing-permission-${Date.now()}.png`;
   const canvas = await createMissingPermissionCard();
+
+  // canvas is null when @napi-rs/canvas is unavailable on this server — use text fallback
+  if (!canvas) {
+    const container = new ContainerBuilder()
+      .addSectionComponents(
+        new SectionBuilder()
+          .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(`## ${emojis.label('status.error', 'Missing Permission')}`),
+          )
+          .setThumbnailAccessory(
+            new ThumbnailBuilder()
+              .setURL(getBotAvatarUrl(client))
+              .setDescription(`${client?.user?.username || 'Bot'} avatar`),
+          ),
+      )
+      .addSeparatorComponents(
+        new SeparatorBuilder()
+          .setDivider(true)
+          .setSpacing(SeparatorSpacingSize.Small),
+      )
+      .addTextDisplayComponents(
+        new TextDisplayBuilder().setContent('You need **Manage Server** or **Administrator** permission to use this command.'),
+      )
+      .addSeparatorComponents(
+        new SeparatorBuilder()
+          .setDivider(true)
+          .setSpacing(SeparatorSpacingSize.Small),
+      )
+      .addTextDisplayComponents(createFooterText());
+    return cv2Payload(container);
+  }
+
+  const filename = `missing-permission-${Date.now()}.png`;
   const attachment = new AttachmentBuilder(canvas, {
     name: filename,
     description: 'Missing permission details',
