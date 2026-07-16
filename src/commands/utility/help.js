@@ -12,7 +12,6 @@ const {
   ThumbnailBuilder,
 } = require('discord.js');
 const emojis = require('../../emojis');
-const { loadCommands } = require('../../handlers/commandLoader');
 const { getGuildPrefix } = require('../../supabase/guildSettings');
 const { cv2Payload } = require('../../utils/cv2');
 
@@ -23,8 +22,9 @@ const HELP_HOME_CUSTOM_ID_PREFIX = `${HELP_COMPONENT_PREFIX}home:`;
 const HELP_PAGE_CUSTOM_ID_PREFIX = `${HELP_COMPONENT_PREFIX}page:`;
 const PAGE_SIZE = 5;
 
-const CATEGORY_ORDER = ['utility', 'moderation', 'voice', 'leveling', 'media', 'setup-roles', 'config', 'owner'];
+const CATEGORY_ORDER = ['utility', 'moderation', 'automod', 'voice', 'leveling', 'media', 'setup-roles', 'config', 'owner'];
 const CATEGORY_LABELS = {
+  automod: 'AutoMod',
   config: 'Config',
   leveling: 'Leveling',
   media: 'Media',
@@ -35,6 +35,7 @@ const CATEGORY_LABELS = {
   voice: 'Voice',
 };
 const CATEGORY_DESCRIPTIONS = {
+  automod: 'Automatic filters for invites, links, spam, mentions, caps, emojis, and bad words.',
   config: 'Server setup commands for prefix and bot configuration.',
   leveling: 'XP, ranks, leaderboards, reward roles, and leveling settings.',
   media: 'Media-only channel setup and enforcement tools.',
@@ -43,6 +44,12 @@ const CATEGORY_DESCRIPTIONS = {
   'setup-roles': 'Guild-specific staff access and named role assignment commands.',
   utility: 'General bot tools for help, latency, and quick checks.',
   voice: 'Mute, deafen, kick, pull, and move users in voice channels.',
+};
+const CATEGORY_ALIASES = {
+  automod: 'automod',
+  automoderation: 'automod',
+  setuprole: 'setup-roles',
+  setuproles: 'setup-roles',
 };
 
 function createSeparator() {
@@ -96,17 +103,30 @@ function getCommandUsage(command, prefix) {
   return replaceDefaultPrefix(command.usage, prefix) || `${prefix}${command.name}`;
 }
 
+function canonicalizeCategory(value) {
+  const normalized = String(value || 'general').trim().toLowerCase();
+  const compact = normalized.replace(/[\s_-]+/g, '');
+
+  return CATEGORY_ALIASES[normalized]
+    || CATEGORY_ALIASES[compact]
+    || normalized;
+}
+
 function getCategoryWeight(category) {
-  const index = CATEGORY_ORDER.indexOf(category);
+  const index = CATEGORY_ORDER.indexOf(canonicalizeCategory(category));
   return index === -1 ? CATEGORY_ORDER.length : index;
 }
 
 function getCategoryLabel(category) {
-  return CATEGORY_LABELS[category] || category[0].toUpperCase() + category.slice(1);
+  const canonicalCategory = canonicalizeCategory(category);
+
+  return CATEGORY_LABELS[canonicalCategory]
+    || canonicalCategory[0].toUpperCase() + canonicalCategory.slice(1);
 }
 
 function getCategoryDescription(category) {
-  return CATEGORY_DESCRIPTIONS[category] || 'Commands available in this category.';
+  return CATEGORY_DESCRIPTIONS[canonicalizeCategory(category)]
+    || 'Commands available in this category.';
 }
 
 function normalizeCategoryValue(value, groupedCommands) {
@@ -116,19 +136,15 @@ function normalizeCategoryValue(value, groupedCommands) {
     return null;
   }
 
-  if (groupedCommands.has(rawValue)) {
-    return rawValue;
-  }
+  const canonicalValue = canonicalizeCategory(rawValue);
 
-  const lowerValue = rawValue.toLowerCase();
-
-  if (groupedCommands.has(lowerValue)) {
-    return lowerValue;
+  if (groupedCommands.has(canonicalValue)) {
+    return canonicalValue;
   }
 
   return [...groupedCommands.keys()].find((category) => (
-    category.toLowerCase() === lowerValue
-    || getCategoryLabel(category).toLowerCase() === lowerValue
+    canonicalizeCategory(category) === canonicalValue
+    || getCategoryLabel(category).toLowerCase() === rawValue.toLowerCase()
   )) || null;
 }
 
@@ -145,7 +161,7 @@ function getGroupedCommands(client) {
     });
 
   return commands.reduce((groups, command) => {
-    const category = command.category || 'general';
+    const category = canonicalizeCategory(command.category);
     const current = groups.get(category) || [];
     current.push(command);
     groups.set(category, current);
@@ -154,25 +170,19 @@ function getGroupedCommands(client) {
 }
 
 function resolveCategorySelection(client, value) {
-  let groupedCommands = getGroupedCommands(client);
-  let category = normalizeCategoryValue(value, groupedCommands);
-
-  if (category) {
-    return {
-      category,
-      groupedCommands,
-      reloaded: false,
-    };
-  }
-
-  loadCommands(client);
-  groupedCommands = getGroupedCommands(client);
-  category = normalizeCategoryValue(value, groupedCommands);
+  // Resolve purely from the already-loaded command registry.
+  // We deliberately do NOT re-run loadCommands() here: re-requiring every
+  // command file on a button click is slow, mutates the shared client.commands,
+  // and, if any file fails to re-require at runtime, silently drops commands
+  // (which caused whole categories to vanish / "interaction failed"). Commands
+  // are loaded once at startup and stay valid for the process lifetime.
+  const groupedCommands = getGroupedCommands(client);
+  const category = normalizeCategoryValue(value, groupedCommands);
 
   return {
     category,
     groupedCommands,
-    reloaded: true,
+    reloaded: false,
   };
 }
 
@@ -465,6 +475,17 @@ function createEphemeralTextPayload(content) {
   );
 }
 
+async function replyEphemeral(interaction, content) {
+  const payload = createEphemeralTextPayload(content);
+
+  if (interaction.deferred || interaction.replied) {
+    await interaction.followUp(payload).catch(() => null);
+    return;
+  }
+
+  await interaction.reply(payload).catch(() => null);
+}
+
 async function execute({ client, message, prefix }) {
   await message.channel.send(await buildHelpPayload({
     client,
@@ -477,25 +498,34 @@ async function handleHomeButton({ client, interaction }) {
   const ownerId = interaction.customId.slice(HELP_HOME_CUSTOM_ID_PREFIX.length);
 
   if (interaction.user.id !== ownerId) {
-    await interaction.reply(createEphemeralTextPayload('Only the panel owner can use this button.')).catch(() => null);
+    await replyEphemeral(interaction, 'Only the panel owner can use this button.');
     return;
   }
 
-  const prefix = await getGuildPrefix(interaction.guildId);
-  await interaction.update(await buildHelpPayload({
-    client,
-    ownerId,
-    prefix,
-  }));
+  await interaction.deferUpdate();
+
+  try {
+    const prefix = await getGuildPrefix(interaction.guildId);
+    await interaction.editReply(await buildHelpPayload({
+      client,
+      ownerId,
+      prefix,
+    }));
+  } catch (error) {
+    console.error('[help] Failed to return to the help home:', error);
+    await replyEphemeral(interaction, `Could not open the help home: \`${error?.message || error}\``);
+  }
 }
 
 async function handleCategorySelect({ client, interaction }) {
   const ownerId = interaction.customId.slice(HELP_CATEGORY_CUSTOM_ID_PREFIX.length);
 
   if (interaction.user.id !== ownerId) {
-    await interaction.reply(createEphemeralTextPayload('Only the panel owner can use this menu.')).catch(() => null);
+    await replyEphemeral(interaction, 'Only the panel owner can use this menu.');
     return;
   }
+
+  await interaction.deferUpdate();
 
   const rawCategory = interaction.values?.[0];
   const {
@@ -506,18 +536,37 @@ async function handleCategorySelect({ client, interaction }) {
 
   if (!category) {
     warnMissingCategory({ groupedCommands, rawCategory, reloaded });
-    await interaction.reply(createEphemeralTextPayload('This command category is not available now.')).catch(() => null);
+    await replyEphemeral(interaction, 'This command category is not available now.');
     return;
   }
 
-  const prefix = await getGuildPrefix(interaction.guildId);
-  await interaction.update(await buildCategoryPayload({
-    category,
-    client,
-    ownerId,
-    page: 0,
-    prefix,
-  }));
+  try {
+    const prefix = await getGuildPrefix(interaction.guildId);
+    await interaction.editReply(await buildCategoryPayload({
+      category,
+      client,
+      ownerId,
+      page: 0,
+      prefix,
+    }));
+  } catch (error) {
+    const code = error?.code ?? error?.rawError?.code;
+
+    // 40060 (already acknowledged) / 10062 (unknown interaction) are benign:
+    // they mean this exact interaction was already handled or expired, which
+    // typically happens when the SAME interaction is delivered twice (e.g. two
+    // bot instances running on the same token). Do not spam or double-reply.
+    if (code === 40060 || code === 10062) {
+      return;
+    }
+
+    const count = (groupedCommands.get(category) || []).length;
+    console.error(`[help] Failed to open category "${category}" (${count} commands):`, error);
+    await replyEphemeral(
+      interaction,
+      `Could not open **${getCategoryLabel(category)}**: \`${error?.message || error}\``,
+    );
+  }
 }
 
 async function handlePageButton({ client, interaction }) {
@@ -525,9 +574,11 @@ async function handlePageButton({ client, interaction }) {
   const [ownerId, rawCategory, rawPage] = payload.split(':');
 
   if (interaction.user.id !== ownerId) {
-    await interaction.reply(createEphemeralTextPayload('Only the panel owner can use these buttons.')).catch(() => null);
+    await replyEphemeral(interaction, 'Only the panel owner can use these buttons.');
     return;
   }
+
+  await interaction.deferUpdate();
 
   const {
     category,
@@ -537,25 +588,39 @@ async function handlePageButton({ client, interaction }) {
 
   if (!category) {
     warnMissingCategory({ groupedCommands, rawCategory, reloaded });
-    await interaction.reply(createEphemeralTextPayload('This command category is not available now.')).catch(() => null);
+    await replyEphemeral(interaction, 'This command category is not available now.');
     return;
   }
 
-  const prefix = await getGuildPrefix(interaction.guildId);
-  await interaction.update(await buildCategoryPayload({
-    category,
-    client,
-    ownerId,
-    page: Number(rawPage) || 0,
-    prefix,
-  }));
+  try {
+    const prefix = await getGuildPrefix(interaction.guildId);
+    await interaction.editReply(await buildCategoryPayload({
+      category,
+      client,
+      ownerId,
+      page: Number(rawPage) || 0,
+      prefix,
+    }));
+  } catch (error) {
+    const code = error?.code ?? error?.rawError?.code;
+
+    if (code === 40060 || code === 10062) {
+      return;
+    }
+
+    console.error(`[help] Failed to open page for category "${category}":`, error);
+    await replyEphemeral(
+      interaction,
+      `Could not open **${getCategoryLabel(category)}**: \`${error?.message || error}\``,
+    );
+  }
 }
 
 async function handleDeleteButton({ interaction }) {
   const ownerId = interaction.customId.slice(HELP_DELETE_CUSTOM_ID_PREFIX.length);
 
   if (interaction.user.id !== ownerId) {
-    await interaction.reply(createEphemeralTextPayload('Only the panel owner can delete this help panel.')).catch(() => null);
+    await replyEphemeral(interaction, 'Only the panel owner can delete this help panel.');
     return;
   }
 

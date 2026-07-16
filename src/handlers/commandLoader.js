@@ -27,25 +27,31 @@ function loadCommands(client) {
   const commandFiles = walkJavaScriptFiles(commandsPath);
 
   for (const filePath of commandFiles) {
-    const command = require(filePath);
+    // Load each command in isolation: a single broken/missing file must never
+    // crash startup or corrupt the whole command set (e.g. during help reloads).
+    try {
+      const command = require(filePath);
 
-    if (!command?.name || typeof command.execute !== 'function') {
-      console.warn(`Skipping invalid command file: ${filePath}`);
-      continue;
-    }
+      if (!command?.name || typeof command.execute !== 'function') {
+        console.warn(`Skipping invalid command file: ${filePath}`);
+        continue;
+      }
 
-    const commandName = command.name.toLowerCase();
-    client.commands.set(commandName, command);
+      const commandName = command.name.toLowerCase();
+      client.commands.set(commandName, command);
 
-    for (const alias of command.aliases || []) {
-      client.aliases.set(alias.toLowerCase(), commandName);
-    }
+      for (const alias of command.aliases || []) {
+        client.aliases.set(alias.toLowerCase(), commandName);
+      }
 
-    for (const handler of command.componentHandlers || []) {
-      client.componentHandlers.push({
-        ...handler,
-        commandName,
-      });
+      for (const handler of command.componentHandlers || []) {
+        client.componentHandlers.push({
+          ...handler,
+          commandName,
+        });
+      }
+    } catch (error) {
+      console.error(`Failed to load command file: ${filePath}`, error);
     }
   }
 }

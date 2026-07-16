@@ -15,6 +15,7 @@ A powerful, all-in-one Discord.js bot built with Components V2 responses, Supaba
 - **Media-Only Channels** — lock channels to media/attachment-only messages
 - **Setup Roles** — create guild-specific named commands that assign preconfigured roles
 - **Moderation Suite** — ban, kick, mute, lock, hide, nuke, role management, nickname, and more
+- **AutoMod** — anti-invite, anti-link, anti-spam, anti-mention, anti-caps, anti-emoji, anti-duplicate, and a blocked-word filter with per-filter actions (delete/warn/mute/kick/ban), exemptions, and action logging
 - **Utility** — help panel, ping card, avatar/banner viewer, snipe, steal emoji/sticker
 - **Owner Tools** — global noprefix access management with duration controls
 - Recursive command loader with alias support and component handlers
@@ -114,6 +115,45 @@ Administrators and the configured bot owner bypass the staff access-role require
 
 ---
 
+### 🛡️ AutoMod
+
+AutoMod automatically scans messages and removes/punishes violations. Everything is **off by default** — enable the master switch, then turn on the filters you want. Administrators and members with **Manage Server** are always exempt, and you can exempt extra roles/channels.
+
+Every filter's action can be one of: `delete`, `warn`, `mute`, `kick`, `ban` (all actions also delete the offending message).
+
+| Command | Description |
+| --- | --- |
+| `LR!automod` | Shows the AutoMod overview panel (master status + every filter). |
+| `LR!automod on` / `LR!automod off` | Master switch for the whole AutoMod system. |
+| `LR!automod mutetime <duration>` | Sets how long the `mute` action lasts (e.g. `10m`, `1h`). |
+| `LR!automod reset confirm` | Wipes all AutoMod settings, bad words, and exemptions. |
+| `LR!antiinvite <on\|off\|action <a>>` | Blocks Discord invite links. |
+| `LR!antilink <on\|off\|action <a>>` | Blocks URLs / website links. |
+| `LR!antispam <on\|off\|action <a>\|<count> <seconds>>` | Blocks fast message spam. |
+| `LR!antimention <on\|off\|action <a>\|<limit>>` | Blocks mass-mention messages. |
+| `LR!anticaps <on\|off\|action <a>\|<percent> [minLen]>` | Blocks excessive UPPERCASE. |
+| `LR!antiemoji <on\|off\|action <a>\|<limit>>` | Blocks emoji-spam messages. |
+| `LR!antiduplicate <on\|off\|action <a>\|<limit>>` | Blocks repeated identical messages. |
+| `LR!badwords <add\|remove\|list\|clear\|on\|off\|action>` | Manages the blocked-word filter. |
+| `LR!automodexempt <add\|remove\|list> <@role\|#channel>` | Manages roles/channels that bypass AutoMod. |
+| `LR!automodlog <#channel\|remove>` | Sets or clears the AutoMod action log channel. |
+
+Example:
+
+```text
+LR!automod on
+LR!antiinvite on
+LR!antispam on
+LR!antispam 5 5
+LR!antispam action mute
+LR!automod mutetime 10m
+LR!badwords add slur1, slur2
+LR!automodexempt add #staff-chat
+LR!automodlog #mod-logs
+```
+
+---
+
 ### 📷 Media-Only Channels
 
 | Command | Description |
@@ -207,6 +247,7 @@ src/supabase/SQL/002_noprefix_users.sql
 src/supabase/SQL/003_media_only_channels.sql
 src/supabase/SQL/004_leveling_system.sql
 src/supabase/SQL/005_setup_roles.sql
+src/supabase/SQL/006_automod.sql
 ```
 
 ### 5. Start the bot
@@ -239,6 +280,7 @@ npm run dev
 | Steal emoji/sticker | Manage Expressions |
 | Leveling (rank cards) | Send Messages, Embed Links |
 | Media-only enforcement | Manage Messages |
+| AutoMod (delete/mute/kick/ban actions) | Manage Messages, Moderate Members, Kick Members, Ban Members |
 | General testing | Administrator is simplest |
 
 ---
@@ -249,6 +291,7 @@ npm run dev
 src/
   canvas/                   Generated image cards (rank, ping)
   commands/
+    automod/                AutoMod filters and configuration commands
     config/                 Prefix / config commands
     leveling/               Full leveling command suite (20 commands)
     media/                  Media-only channel commands
@@ -270,16 +313,18 @@ src/
 
 - `src/index.js` — Creates the Discord client, registers handlers, and logs in.
 - `src/handlers/commandLoader.js` — Recursively loads all command files from `src/commands/`.
-- `src/handlers/messageCreate.js` — Resolves guild prefix, supports noprefix access, matches longest command name first.
+- `src/handlers/messageCreate.js` — Scans each message through AutoMod first, then resolves guild prefix, supports noprefix access, and matches the longest command name first.
 - `src/handlers/interactionCreate.js` — Routes button and select-menu interactions to each command's `componentHandlers`.
 - `src/utils/cv2.js` — Builds Components V2 payloads with safe default mention behavior.
 - `src/utils/leveling.js` — Handles XP gain, cooldown, level-up events, and role rewards.
 - `src/utils/channelModerationCommand.js` — Shared logic for lock/hide/unlock/unhide channel operations.
 - `src/utils/mediaOnlyCommand.js` — Shared logic for media-only channel enforcement.
 - `src/utils/setupRoles.js` — Resolves dynamic named role commands and validates access/hierarchy.
+- `src/utils/automod.js` — Scans messages, detects violations (invite/link/spam/mention/caps/emoji/duplicate/bad words), and applies configured actions.
 - `src/supabase/leveling.js` — All leveling DB queries (XP, levels, config, leaderboard).
 - `src/supabase/mediaOnlyChannels.js` — Media-only channel DB queries.
 - `src/supabase/setupRoles.js` — Stores and caches setup-role access roles and command mappings.
+- `src/supabase/automod.js` — Stores and caches per-guild AutoMod settings, bad words, and exemptions.
 - `src/supabase/guildSettings.js` — Stores and caches server prefixes.
 - `src/supabase/noPrefixUsers.js` — Stores, expires, caches, and lists noprefix users.
 

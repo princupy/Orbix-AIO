@@ -11,6 +11,7 @@ const { getGuildPrefix } = require('../supabase/guildSettings');
 const { getMediaOnlyChannelIds } = require('../supabase/mediaOnlyChannels');
 const { isNoPrefixUser } = require('../supabase/noPrefixUsers');
 const { createNoticeContainer, cv2Payload } = require('../utils/cv2');
+const { processAutomodMessage } = require('../utils/automod');
 const { processLevelingMessage } = require('../utils/leveling');
 const { resolveSetupRoleCommand } = require('../utils/setupRoles');
 
@@ -475,6 +476,18 @@ function createTimeoutProxy(message, delayMs) {
 async function handleMessageCreate(client, message) {
   if (!message.guild || message.author.bot) {
     return;
+  }
+
+  // AutoMod runs first: if a message violates a filter it is removed/punished and
+  // no further processing (commands, leveling, AFK) happens for that message.
+  try {
+    const automodResult = await processAutomodMessage(message);
+
+    if (automodResult?.acted) {
+      return;
+    }
+  } catch (error) {
+    console.warn(`[automod] Failed to scan message in ${message.guild.id}:`, error?.message || error);
   }
 
   const prefix = await getGuildPrefix(message.guild.id);
