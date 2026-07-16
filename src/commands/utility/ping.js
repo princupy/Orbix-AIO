@@ -96,7 +96,13 @@ function buildPingContainer({ client, latencyMs, filename }) {
 async function buildPingPayload({ client, latencyMs, requesterId, replaceAttachments = false }) {
   const wsPing = getSafeWebSocketPing(client);
   const filename = `ping-card-${requesterId}-${Date.now()}.png`;
+  const avatarURL = client.user?.displayAvatarURL?.({
+    extension: 'png',
+    forceStatic: true,
+    size: 256,
+  }) || null;
   const canvas = await createPingCard({
+    avatarURL,
     botName: client.user?.username,
     latencyMs,
     websocketMs: wsPing,
@@ -152,5 +158,6 @@ module.exports = {
   category: 'utility',
   description: 'Shows bot latency.',
   usage: 'LR!ping',
+  noTimeout: true,
   execute,
 };
