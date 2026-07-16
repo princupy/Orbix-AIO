@@ -21,8 +21,8 @@ function createSeparator() {
 }
 
 function createFooter() {
-  const emoji = emojis.getEmoji('lr.logo') || emojis.getEmoji('status.success') || '*';
-  return new TextDisplayBuilder().setContent(`${emoji} **Powered by Prince**`);
+  const emoji = emojis.getEmoji('cutu.nitish') || emojis.getEmoji('status.success') || '*';
+  return new TextDisplayBuilder().setContent(`${emoji} Made by [Tanmay](https://www.instagram.com/tanmoy_here8388/)`);
 }
 
 function deleteRow(prefix, ownerId) {

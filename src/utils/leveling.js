@@ -50,8 +50,8 @@ function createSeparator() {
 }
 
 function createFooterText() {
-  const poweredEmoji = emojis.getEmoji('lr.logo') || emojis.getEmoji('status.success') || '*';
-  return new TextDisplayBuilder().setContent(`${poweredEmoji} **Powered by Prince**`);
+  const poweredEmoji = emojis.getEmoji('cutu.nitish') || emojis.getEmoji('status.success') || '*';
+  return new TextDisplayBuilder().setContent(`${poweredEmoji} Made by [Tanmay](https://www.instagram.com/tanmoy_here8388/)`);
 }
 
 function createDeleteRow(ownerId) {

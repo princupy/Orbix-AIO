@@ -22,7 +22,7 @@ const HELP_HOME_CUSTOM_ID_PREFIX = `${HELP_COMPONENT_PREFIX}home:`;
 const HELP_PAGE_CUSTOM_ID_PREFIX = `${HELP_COMPONENT_PREFIX}page:`;
 const PAGE_SIZE = 5;
 
-const CATEGORY_ORDER = ['utility', 'moderation', 'automod', 'voice', 'leveling', 'media', 'setup-roles', 'config', 'owner'];
+const CATEGORY_ORDER = ['utility', 'moderation', 'automod', 'ticket', 'voice', 'leveling', 'media', 'setup-roles', 'config', 'owner'];
 const CATEGORY_LABELS = {
   automod: 'AutoMod',
   config: 'Config',
@@ -31,6 +31,7 @@ const CATEGORY_LABELS = {
   moderation: 'Moderation',
   owner: 'Owner',
   'setup-roles': 'Setup Roles',
+  ticket: 'Tickets',
   utility: 'Utility',
   voice: 'Voice',
 };
@@ -42,6 +43,7 @@ const CATEGORY_DESCRIPTIONS = {
   moderation: 'Server moderation tools to manage messages and users.',
   owner: 'Bot owner controls for global noprefix access management.',
   'setup-roles': 'Guild-specific staff access and named role assignment commands.',
+  ticket: 'Support ticket panel, creation, claiming, and transcripts.',
   utility: 'General bot tools for help, latency, and quick checks.',
   voice: 'Mute, deafen, kick, pull, and move users in voice channels.',
 };
@@ -66,8 +68,8 @@ function getBotAvatarUrl(client) {
 }
 
 function createFooterText() {
-  const poweredEmoji = emojis.getEmoji('lr.logo') || emojis.getEmoji('status.success') || '*';
-  return new TextDisplayBuilder().setContent(`${poweredEmoji} **Powered by Prince**`);
+  const poweredEmoji = emojis.getEmoji('cutu.nitish') || emojis.getEmoji('status.success') || '*';
+  return new TextDisplayBuilder().setContent(`${poweredEmoji} Made by [Tanmay](https://www.instagram.com/tanmoy_here8388/)`);
 }
 
 function createHeaderSection({ client }) {

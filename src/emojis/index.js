@@ -59,6 +59,13 @@ const catalog = {
       animated: false,
     },
   },
+  cutu: {
+    nitish: {
+      name: 'cutu_nitish',
+      id: '1333462390204928101',
+      animated: true,
+    },
+  },
   noprefix: {
     noprefix: {
       name: 'lr_noprefix_add',
