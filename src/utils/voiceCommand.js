@@ -106,6 +106,40 @@ function getVoiceChannels(guild) {
     .sort((a, b) => (a.rawPosition ?? 0) - (b.rawPosition ?? 0));
 }
 
+/** True if the channel is a normal or stage voice channel. */
+function isVoiceChannel(channel) {
+  return Boolean(channel)
+    && (channel.type === ChannelType.GuildVoice || channel.type === ChannelType.GuildStageVoice);
+}
+
+/**
+ * Resolve a target voice/stage channel from a raw argument.
+ * Accepts a <#id> mention, a raw ID, or a channel name (exact match, then partial).
+ * Falls back to the author's current voice channel when no argument is given.
+ * Returns the channel or null.
+ */
+function resolveVoiceChannel(message, rawArg) {
+  const arg = String(rawArg || '').trim();
+
+  if (arg) {
+    const id = extractChannelId(arg);
+    if (id) {
+      const byId = message.guild.channels.cache.get(id);
+      return isVoiceChannel(byId) ? byId : null;
+    }
+
+    const query = arg.toLowerCase();
+    const channels = getVoiceChannels(message.guild);
+    return channels.find((ch) => ch.name.toLowerCase() === query)
+      || channels.find((ch) => ch.name.toLowerCase().includes(query))
+      || null;
+  }
+
+  return message.member?.voice?.channel && isVoiceChannel(message.member.voice.channel)
+    ? message.member.voice.channel
+    : null;
+}
+
 /**
  * Build a StringSelectMenu ActionRow of voice channels.
  * Returns null if there are no options to show.
@@ -154,6 +188,8 @@ module.exports = {
   extractChannelId,
   hasPerm,
   getVoiceChannels,
+  isVoiceChannel,
+  resolveVoiceChannel,
   vcSelectRow,
   handleDelete,
 };
