@@ -105,6 +105,9 @@ const client = new Client({
   partials: [Partials.Channel, Partials.Message, Partials.Reaction, Partials.User],
 });
 
+const musicManager = require('./utils/music').initializeMusic(client);
+require('./utils/musicUi').attachMusicUi(musicManager);
+
 loadCommands(client);
 
 const ACTIVITY_TYPES = {

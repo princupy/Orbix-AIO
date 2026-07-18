@@ -22,7 +22,7 @@ const HELP_HOME_CUSTOM_ID_PREFIX = `${HELP_COMPONENT_PREFIX}home:`;
 const HELP_PAGE_CUSTOM_ID_PREFIX = `${HELP_COMPONENT_PREFIX}page:`;
 const PAGE_SIZE = 5;
 
-const CATEGORY_ORDER = ['utility', 'moderation', 'automod', 'logs', 'ticket', 'voice', 'leveling', 'media', 'setup-roles', 'config', 'owner'];
+const CATEGORY_ORDER = ['utility', 'moderation', 'automod', 'logs', 'ticket', 'music', 'voice', 'leveling', 'media', 'setup-roles', 'config', 'owner'];
 const CATEGORY_LABELS = {
   automod: 'AutoMod',
   config: 'Config',
