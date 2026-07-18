@@ -22,11 +22,12 @@ const HELP_HOME_CUSTOM_ID_PREFIX = `${HELP_COMPONENT_PREFIX}home:`;
 const HELP_PAGE_CUSTOM_ID_PREFIX = `${HELP_COMPONENT_PREFIX}page:`;
 const PAGE_SIZE = 5;
 
-const CATEGORY_ORDER = ['utility', 'moderation', 'automod', 'ticket', 'voice', 'leveling', 'media', 'setup-roles', 'config', 'owner'];
+const CATEGORY_ORDER = ['utility', 'moderation', 'automod', 'logs', 'ticket', 'voice', 'leveling', 'media', 'setup-roles', 'config', 'owner'];
 const CATEGORY_LABELS = {
   automod: 'AutoMod',
   config: 'Config',
   leveling: 'Leveling',
+  logs: 'Logs',
   media: 'Media',
   moderation: 'Moderation',
   owner: 'Owner',
@@ -39,6 +40,7 @@ const CATEGORY_DESCRIPTIONS = {
   automod: 'Automatic filters for invites, links, spam, mentions, caps, emojis, and bad words.',
   config: 'Server setup commands for prefix and bot configuration.',
   leveling: 'XP, ranks, leaderboards, reward roles, and leveling settings.',
+  logs: 'Per-type server logging for messages, moderation, joins, leaves, and voice.',
   media: 'Media-only channel setup and enforcement tools.',
   moderation: 'Server moderation tools to manage messages and users.',
   owner: 'Bot owner controls for global noprefix access management.',

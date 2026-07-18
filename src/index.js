@@ -15,6 +15,15 @@ const { cleanupLeftGuildSettings, handleGuildDelete } = require('./handlers/guil
 const { handleInteractionCreate } = require('./handlers/interactionCreate');
 const { handleMessageCreate } = require('./handlers/messageCreate');
 const { storeDeletedMessage } = require('./handlers/snipeStore');
+const {
+  handleGuildBanAdd,
+  handleGuildMemberAdd,
+  handleGuildMemberRemove,
+  handleGuildMemberUpdate,
+  handleMessageDelete: handleLogMessageDelete,
+  handleMessageUpdate: handleLogMessageUpdate,
+  handleVoiceStateUpdate,
+} = require('./utils/logs');
 
 const token = process.env.DISCORD_TOKEN;
 
@@ -87,6 +96,7 @@ const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildModeration,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.GuildMessageReactions,
     GatewayIntentBits.GuildVoiceStates,
@@ -175,6 +185,31 @@ client.on(Events.InteractionCreate, (interaction) => {
 
 client.on(Events.MessageDelete, (message) => {
   storeDeletedMessage(message);
+  handleLogMessageDelete(message);
+});
+
+client.on(Events.MessageUpdate, (oldMessage, newMessage) => {
+  handleLogMessageUpdate(oldMessage, newMessage);
+});
+
+client.on(Events.GuildBanAdd, (ban) => {
+  handleGuildBanAdd(ban);
+});
+
+client.on(Events.GuildMemberAdd, (member) => {
+  handleGuildMemberAdd(member);
+});
+
+client.on(Events.GuildMemberRemove, (member) => {
+  handleGuildMemberRemove(member);
+});
+
+client.on(Events.GuildMemberUpdate, (oldMember, newMember) => {
+  handleGuildMemberUpdate(oldMember, newMember);
+});
+
+client.on(Events.VoiceStateUpdate, (oldState, newState) => {
+  handleVoiceStateUpdate(oldState, newState);
 });
 
 client.on(Events.GuildDelete, (guild) => {

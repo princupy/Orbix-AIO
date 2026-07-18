@@ -19,6 +19,10 @@ const {
   cleanupLeftTicketData,
   resetTicketData,
 } = require('../supabase/tickets');
+const {
+  cleanupLeftLogData,
+  resetLogData,
+} = require('../supabase/logs');
 
 async function cleanupLeftGuildData(activeGuildIds) {
   const settingsResult = await cleanupLeftGuildSettings(activeGuildIds);
@@ -27,6 +31,7 @@ async function cleanupLeftGuildData(activeGuildIds) {
   const setupRoleResult = await cleanupLeftSetupRoleData(activeGuildIds);
   const automodResult = await cleanupLeftAutomodData(activeGuildIds);
   const ticketResult = await cleanupLeftTicketData(activeGuildIds);
+  const logResult = await cleanupLeftLogData(activeGuildIds);
 
   if (!mediaResult.ok) {
     console.warn(`[supabase] Failed to clean up media-only channels: ${mediaResult.reason}`);
@@ -48,6 +53,10 @@ async function cleanupLeftGuildData(activeGuildIds) {
     console.warn(`[supabase] Failed to clean up ticket data: ${ticketResult.reason}`);
   }
 
+  if (!logResult.ok) {
+    console.warn(`[supabase] Failed to clean up log data: ${logResult.reason}`);
+  }
+
   return settingsResult;
 }
 
@@ -58,6 +67,7 @@ async function handleGuildDelete(guild) {
   const setupRoleResult = await resetSetupRoleData(guild.id);
   const automodResult = await resetAutomodData(guild.id);
   const ticketResult = await resetTicketData(guild.id);
+  const logResult = await resetLogData(guild.id);
 
   if (!result.ok) {
     console.warn(`[supabase] Failed to reset settings for guild ${guild.id}: ${result.reason}`);
@@ -82,6 +92,10 @@ async function handleGuildDelete(guild) {
 
   if (!ticketResult.ok) {
     console.warn(`[supabase] Failed to reset ticket data for guild ${guild.id}: ${ticketResult.reason}`);
+  }
+
+  if (!logResult.ok) {
+    console.warn(`[supabase] Failed to reset log data for guild ${guild.id}: ${logResult.reason}`);
   }
 
   console.log(`Reset settings for guild ${guild.id}`);
