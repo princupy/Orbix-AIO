@@ -22,8 +22,9 @@ const HELP_HOME_CUSTOM_ID_PREFIX = `${HELP_COMPONENT_PREFIX}home:`;
 const HELP_PAGE_CUSTOM_ID_PREFIX = `${HELP_COMPONENT_PREFIX}page:`;
 const PAGE_SIZE = 5;
 
-const CATEGORY_ORDER = ['utility', 'moderation', 'automod', 'logs', 'ticket', 'music', 'voice', 'leveling', 'media', 'setup-roles', 'config', 'owner'];
+const CATEGORY_ORDER = ['utility', 'moderation', 'automod', 'logs', 'ticket', 'music', 'voice', 'leveling', 'media', 'welcome', 'auto-roles', 'setup-roles', 'config', 'owner'];
 const CATEGORY_LABELS = {
+  'auto-roles': 'Auto Roles',
   automod: 'AutoMod',
   config: 'Config',
   leveling: 'Leveling',
@@ -35,8 +36,10 @@ const CATEGORY_LABELS = {
   ticket: 'Tickets',
   utility: 'Utility',
   voice: 'Voice',
+  welcome: 'Welcome',
 };
 const CATEGORY_DESCRIPTIONS = {
+  'auto-roles': 'Automatically assign roles to members and bots when they join.',
   automod: 'Automatic filters for invites, links, spam, mentions, caps, emojis, and bad words.',
   config: 'Server setup commands for prefix and bot configuration.',
   leveling: 'XP, ranks, leaderboards, reward roles, and leveling settings.',
@@ -48,8 +51,13 @@ const CATEGORY_DESCRIPTIONS = {
   ticket: 'Support ticket panel, creation, claiming, and transcripts.',
   utility: 'General bot tools for help, latency, and quick checks.',
   voice: 'Mute, deafen, kick, pull, and move users in voice channels.',
+  welcome: 'Greet new members with a custom message when they join.',
 };
 const CATEGORY_ALIASES = {
+  autorole: 'auto-roles',
+  autoroles: 'auto-roles',
+  greet: 'welcome',
+  welcomer: 'welcome',
   automod: 'automod',
   automoderation: 'automod',
   setuprole: 'setup-roles',

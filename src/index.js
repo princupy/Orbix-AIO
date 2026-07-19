@@ -24,6 +24,8 @@ const {
   handleMessageUpdate: handleLogMessageUpdate,
   handleVoiceStateUpdate,
 } = require('./utils/logs');
+const { handleAutoroleMemberAdd } = require('./utils/autoroles');
+const { handleWelcomeMemberAdd } = require('./utils/welcome');
 
 const token = process.env.DISCORD_TOKEN;
 
@@ -201,6 +203,8 @@ client.on(Events.GuildBanAdd, (ban) => {
 
 client.on(Events.GuildMemberAdd, (member) => {
   handleGuildMemberAdd(member);
+  handleAutoroleMemberAdd(member);
+  handleWelcomeMemberAdd(member);
 });
 
 client.on(Events.GuildMemberRemove, (member) => {

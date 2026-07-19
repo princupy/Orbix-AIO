@@ -23,6 +23,14 @@ const {
   cleanupLeftLogData,
   resetLogData,
 } = require('../supabase/logs');
+const {
+  cleanupLeftAutoroleData,
+  resetAutoroleData,
+} = require('../supabase/autoroles');
+const {
+  cleanupLeftWelcomeData,
+  resetWelcomeData,
+} = require('../supabase/welcome');
 
 async function cleanupLeftGuildData(activeGuildIds) {
   const settingsResult = await cleanupLeftGuildSettings(activeGuildIds);
@@ -32,6 +40,8 @@ async function cleanupLeftGuildData(activeGuildIds) {
   const automodResult = await cleanupLeftAutomodData(activeGuildIds);
   const ticketResult = await cleanupLeftTicketData(activeGuildIds);
   const logResult = await cleanupLeftLogData(activeGuildIds);
+  const autoroleResult = await cleanupLeftAutoroleData(activeGuildIds);
+  const welcomeResult = await cleanupLeftWelcomeData(activeGuildIds);
 
   if (!mediaResult.ok) {
     console.warn(`[supabase] Failed to clean up media-only channels: ${mediaResult.reason}`);
@@ -57,6 +67,14 @@ async function cleanupLeftGuildData(activeGuildIds) {
     console.warn(`[supabase] Failed to clean up log data: ${logResult.reason}`);
   }
 
+  if (!autoroleResult.ok) {
+    console.warn(`[supabase] Failed to clean up autorole data: ${autoroleResult.reason}`);
+  }
+
+  if (!welcomeResult.ok) {
+    console.warn(`[supabase] Failed to clean up welcome data: ${welcomeResult.reason}`);
+  }
+
   return settingsResult;
 }
 
@@ -68,6 +86,8 @@ async function handleGuildDelete(guild) {
   const automodResult = await resetAutomodData(guild.id);
   const ticketResult = await resetTicketData(guild.id);
   const logResult = await resetLogData(guild.id);
+  const autoroleResult = await resetAutoroleData(guild.id);
+  const welcomeResult = await resetWelcomeData(guild.id);
 
   if (!result.ok) {
     console.warn(`[supabase] Failed to reset settings for guild ${guild.id}: ${result.reason}`);
@@ -96,6 +116,14 @@ async function handleGuildDelete(guild) {
 
   if (!logResult.ok) {
     console.warn(`[supabase] Failed to reset log data for guild ${guild.id}: ${logResult.reason}`);
+  }
+
+  if (!autoroleResult.ok) {
+    console.warn(`[supabase] Failed to reset autorole data for guild ${guild.id}: ${autoroleResult.reason}`);
+  }
+
+  if (!welcomeResult.ok) {
+    console.warn(`[supabase] Failed to reset welcome data for guild ${guild.id}: ${welcomeResult.reason}`);
   }
 
   console.log(`Reset settings for guild ${guild.id}`);
