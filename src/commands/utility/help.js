@@ -22,11 +22,12 @@ const HELP_HOME_CUSTOM_ID_PREFIX = `${HELP_COMPONENT_PREFIX}home:`;
 const HELP_PAGE_CUSTOM_ID_PREFIX = `${HELP_COMPONENT_PREFIX}page:`;
 const PAGE_SIZE = 5;
 
-const CATEGORY_ORDER = ['utility', 'moderation', 'automod', 'logs', 'ticket', 'music', 'voice', 'leveling', 'media', 'welcome', 'auto-roles', 'setup-roles', 'config', 'owner'];
+const CATEGORY_ORDER = ['utility', 'moderation', 'automod', 'logs', 'ticket', 'music', 'voice', 'leveling', 'fun', 'media', 'welcome', 'auto-roles', 'setup-roles', 'config', 'owner'];
 const CATEGORY_LABELS = {
   'auto-roles': 'Auto Roles',
   automod: 'AutoMod',
   config: 'Config',
+  fun: 'Fun',
   leveling: 'Leveling',
   logs: 'Logs',
   media: 'Media',
@@ -42,6 +43,7 @@ const CATEGORY_DESCRIPTIONS = {
   'auto-roles': 'Automatically assign roles to members and bots when they join.',
   automod: 'Automatic filters for invites, links, spam, mentions, caps, emojis, and bad words.',
   config: 'Server setup commands for prefix and bot configuration.',
+  fun: 'Fun commands like shipping users and love compatibility.',
   leveling: 'XP, ranks, leaderboards, reward roles, and leveling settings.',
   logs: 'Per-type server logging for messages, moderation, joins, leaves, and voice.',
   media: 'Media-only channel setup and enforcement tools.',
