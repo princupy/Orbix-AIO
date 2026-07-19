@@ -82,6 +82,29 @@ function normalizeTrack(track, requester, id, playlistName = null) {
   };
 }
 
+/**
+ * True if a player event's track is the session's current track. Matches on the
+ * queueEntryId we stored in userData (Lavalink v4 echoes it back reliably) and
+ * falls back to the encoded string — the encoded value alone can differ from
+ * what we sent once userData is attached, which previously broke auto-advance.
+ */
+function trackMatchesCurrent(event, session) {
+  const current = session.current;
+  const track = event?.track;
+
+  if (!current || !track) {
+    return false;
+  }
+
+  const entryId = track.userData?.queueEntryId;
+
+  if (entryId !== undefined && entryId !== null && String(entryId) === String(current.id)) {
+    return true;
+  }
+
+  return Boolean(track.encoded) && track.encoded === current.encoded;
+}
+
 function createSession({ guildId, nonce, player, textChannelId, voiceChannelId }) {
   return {
     current: null,
@@ -425,11 +448,7 @@ class MusicManager extends EventEmitter {
     const { player } = session;
 
     player.on('start', (event) => {
-      if (
-        session.destroying
-        || !session.current
-        || event?.track?.encoded !== session.current.encoded
-      ) {
+      if (session.destroying || !trackMatchesCurrent(event, session)) {
         return;
       }
 
@@ -443,15 +462,14 @@ class MusicManager extends EventEmitter {
     player.on('end', (event) => {
       if (
         session.destroying
-        || !session.current
-        || event?.track?.encoded !== session.current.encoded
+        || !trackMatchesCurrent(event, session)
         || !['finished', 'loadFailed'].includes(event.reason)
       ) {
         return;
       }
 
       this.serialize(session, async () => {
-        if (!session.current || event.track.encoded !== session.current.encoded) {
+        if (!trackMatchesCurrent(event, session)) {
           return;
         }
 
@@ -490,7 +508,7 @@ class MusicManager extends EventEmitter {
 
       console.warn(`[music] Track stuck in guild ${session.guildId} after ${event?.thresholdMs || 0}ms`);
       this.serialize(session, async () => {
-        if (!session.current || event?.track?.encoded !== session.current.encoded) {
+        if (!trackMatchesCurrent(event, session)) {
           return;
         }
 
