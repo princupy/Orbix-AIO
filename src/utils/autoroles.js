@@ -8,6 +8,7 @@ const {
 const emojis = require('../emojis');
 const { cv2Payload } = require('./cv2');
 const { getAutoroleConfig } = require('../supabase/autoroles');
+const { isModuleEnabled } = require('../supabase/modules');
 
 function createSeparator() {
   return new SeparatorBuilder()
@@ -116,6 +117,10 @@ async function handleAutoroleMemberAdd(member) {
     const { guild, user } = member;
 
     if (!guild || !user) {
+      return;
+    }
+
+    if (!(await isModuleEnabled(guild.id, 'autoroles'))) {
       return;
     }
 

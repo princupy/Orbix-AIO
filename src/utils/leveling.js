@@ -27,6 +27,7 @@ const {
   listMultipliers,
   markLevelUpNotified,
 } = require('../supabase/leveling');
+const { isModuleEnabled } = require('../supabase/modules');
 
 const LEVELING_DELETE_CUSTOM_ID_PREFIX = 'leveling:delete:';
 const RANK_CARD_WIDTH = 900;
@@ -697,6 +698,13 @@ async function processLevelingMessage(message, prefix) {
     return {
       awarded: false,
       reason: 'ignored',
+    };
+  }
+
+  if (!(await isModuleEnabled(message.guild.id, 'leveling'))) {
+    return {
+      awarded: false,
+      reason: 'module_disabled',
     };
   }
 

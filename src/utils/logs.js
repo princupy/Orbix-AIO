@@ -11,6 +11,10 @@ const {
 const emojis = require('../emojis');
 const { cv2Payload } = require('./cv2');
 const { LOG_TYPE_BY_KEY, getLogConfig } = require('../supabase/logs');
+const { isModuleEnabled } = require('../supabase/modules');
+const { recordActivityLog } = require('../supabase/activityLogs');
+const { deactivateActiveCases, recordModerationCase } = require('../supabase/moderationCases');
+const { pushLogEvent, pushModAction } = require('../dashboard/bridge');
 
 const CONTENT_LIMIT = 1000;
 const AUDIT_WINDOW_MS = 8000;
@@ -104,7 +108,35 @@ async function getLogChannel(guild, typeKey) {
   return channel;
 }
 
-async function sendLog(guild, typeKey, container) {
+async function sendLog(guild, typeKey, container, meta = null) {
+  if (!(await isModuleEnabled(guild.id, 'logs'))) {
+    return;
+  }
+
+  // Dashboard live feed: persist + push the event whenever logging is enabled,
+  // independent of whether a Discord log channel is configured.
+  if (meta) {
+    const event = {
+      guildId: guild.id,
+      type: typeKey,
+      title: meta.title || typeKey,
+      description: meta.description || '',
+      targetId: meta.targetId || null,
+      targetTag: meta.targetTag || null,
+      moderatorId: meta.moderatorId || null,
+      moderatorTag: meta.moderatorTag || null,
+      at: Date.now(),
+    };
+
+    recordActivityLog(event);
+
+    try {
+      pushLogEvent(event);
+    } catch {
+      // Bridge is optional; ignore push failures.
+    }
+  }
+
   const channel = await getLogChannel(guild, typeKey);
 
   if (!channel) {
@@ -118,6 +150,44 @@ async function sendLog(guild, typeKey, container) {
   })).catch((error) => {
     console.warn(`[logs] Failed to send ${typeKey} log in ${guild.id}:`, error?.message || error);
   });
+}
+
+// Record a moderation case (best-effort) and push it to the dashboard's live
+// moderation table. Fire-and-forget; never blocks the log handler.
+async function recordCase(guild, caseType, {
+  target, moderator, reason = null, active = false, durationMs = null, expiresAt = null,
+}) {
+  try {
+    const entry = {
+      guildId: guild.id,
+      caseType,
+      targetId: target?.id || null,
+      targetTag: target?.tag || null,
+      moderatorId: moderator?.id || null,
+      moderatorTag: moderator?.tag || moderator?.username || null,
+      reason,
+      durationMs,
+      expiresAt,
+      active,
+    };
+
+    const result = await recordModerationCase(entry);
+
+    pushModAction({
+      guildId: guild.id,
+      id: result?.id ?? null,
+      type: caseType,
+      targetId: entry.targetId,
+      targetTag: entry.targetTag,
+      moderatorId: entry.moderatorId,
+      moderatorTag: entry.moderatorTag,
+      reason: entry.reason,
+      active: entry.active,
+      at: Date.now(),
+    });
+  } catch (error) {
+    console.warn('[logs] recordCase failed:', error?.message || error);
+  }
 }
 
 /* ── Container builder ── */
@@ -240,7 +310,14 @@ async function handleMessageDelete(message) {
         content,
       ],
       titleLine: titleFor('message', 'Message Deleted'),
-    }));
+    }), {
+      title: 'Message Deleted',
+      description: message.author
+        ? `${message.author.tag} in #${message.channel?.name || message.channelId}`
+        : `Message deleted in #${message.channel?.name || message.channelId}`,
+      targetId: message.author?.id || null,
+      targetTag: message.author?.tag || null,
+    });
   } catch (error) {
     console.warn('[logs] message delete handler failed:', error?.message || error);
   }
@@ -281,7 +358,12 @@ async function handleMessageUpdate(oldMessage, newMessage) {
         newContent ? truncate(newContent) : '`Unavailable`',
       ],
       titleLine: titleFor('message', 'Message Edited'),
-    }));
+    }), {
+      title: 'Message Edited',
+      description: `${newMessage.author?.tag || 'Unknown'} in #${newMessage.channel?.name || newMessage.channelId}`,
+      targetId: newMessage.author?.id || null,
+      targetTag: newMessage.author?.tag || null,
+    });
   } catch (error) {
     console.warn('[logs] message update handler failed:', error?.message || error);
   }
@@ -305,9 +387,42 @@ async function handleGuildBanAdd(ban) {
       ],
       thumbnailUrl: avatarOf(user),
       titleLine: titleFor('ban', 'Member Banned'),
-    }));
+    }), {
+      title: 'Member Banned',
+      description: executor
+        ? `${user.tag} · by ${executor.tag || executor.username}`
+        : user.tag,
+      targetId: user.id,
+      targetTag: user.tag,
+      moderatorId: executor?.id || null,
+      moderatorTag: executor?.tag || executor?.username || null,
+    });
+
+    recordCase(guild, 'ban', {
+      target: user,
+      moderator: executor,
+      reason: resolvedBan?.reason || reason,
+      active: true,
+    });
   } catch (error) {
     console.warn('[logs] ban handler failed:', error?.message || error);
+  }
+}
+
+async function handleGuildBanRemove(ban) {
+  try {
+    const { guild, user } = ban;
+    const { executor, reason } = await fetchAuditExecutor(guild, AuditLogEvent.MemberBanRemove, user.id);
+
+    deactivateActiveCases(guild.id, user.id, ['ban']).catch(() => {});
+    recordCase(guild, 'unban', {
+      target: user,
+      moderator: executor,
+      reason,
+      active: false,
+    });
+  } catch (error) {
+    console.warn('[logs] ban remove handler failed:', error?.message || error);
   }
 }
 
@@ -334,7 +449,25 @@ async function handleGuildMemberUpdate(oldMember, newMember) {
         ],
         thumbnailUrl: avatarOf(newMember.user),
         titleLine: titleFor('mute', 'Member Muted'),
-      }));
+      }), {
+        title: 'Member Muted',
+        description: executor
+          ? `${newMember.user.tag} · by ${executor.tag || executor.username}`
+          : newMember.user.tag,
+        targetId: newMember.id,
+        targetTag: newMember.user.tag,
+        moderatorId: executor?.id || null,
+        moderatorTag: executor?.tag || executor?.username || null,
+      });
+
+      recordCase(guild, 'mute', {
+        target: newMember.user,
+        moderator: executor,
+        reason,
+        active: true,
+        expiresAt: newUntil ? new Date(newUntil).toISOString() : null,
+        durationMs: newUntil ? Math.max(0, newUntil - Date.now()) : null,
+      });
       return;
     }
 
@@ -350,7 +483,24 @@ async function handleGuildMemberUpdate(oldMember, newMember) {
         ],
         thumbnailUrl: avatarOf(newMember.user),
         titleLine: titleFor('unmute', 'Member Unmuted'),
-      }));
+      }), {
+        title: 'Member Unmuted',
+        description: executor
+          ? `${newMember.user.tag} · by ${executor.tag || executor.username}`
+          : newMember.user.tag,
+        targetId: newMember.id,
+        targetTag: newMember.user.tag,
+        moderatorId: executor?.id || null,
+        moderatorTag: executor?.tag || executor?.username || null,
+      });
+
+      recordCase(guild, 'unmute', {
+        target: newMember.user,
+        moderator: executor,
+        reason,
+        active: false,
+      });
+      deactivateActiveCases(guild.id, newMember.id, ['mute']).catch(() => {});
     }
   } catch (error) {
     console.warn('[logs] member update handler failed:', error?.message || error);
@@ -372,7 +522,12 @@ async function handleGuildMemberAdd(member) {
       ],
       thumbnailUrl: avatarOf(user),
       titleLine: titleFor('join', 'Member Joined'),
-    }));
+    }), {
+      title: 'Member Joined',
+      description: `${user.tag} · member #${guild.memberCount}`,
+      targetId: user.id,
+      targetTag: user.tag,
+    });
   } catch (error) {
     console.warn('[logs] member add handler failed:', error?.message || error);
   }
@@ -400,7 +555,23 @@ async function handleGuildMemberRemove(member) {
         ],
         thumbnailUrl: avatarOf(user),
         titleLine: titleFor('kick', 'Member Kicked'),
-      }));
+      }), {
+        title: 'Member Kicked',
+        description: kick.executor
+          ? `${user.tag} · by ${kick.executor.tag || kick.executor.username}`
+          : user.tag,
+        targetId: user.id,
+        targetTag: user.tag,
+        moderatorId: kick.executor?.id || null,
+        moderatorTag: kick.executor?.tag || kick.executor?.username || null,
+      });
+
+      recordCase(guild, 'kick', {
+        target: user,
+        moderator: kick.executor,
+        reason: kick.reason,
+        active: false,
+      });
       return;
     }
 
@@ -424,7 +595,12 @@ async function handleGuildMemberRemove(member) {
       ],
       thumbnailUrl: avatarOf(user),
       titleLine: titleFor('leave', 'Member Left'),
-    }));
+    }), {
+      title: 'Member Left',
+      description: `${user.tag} · ${guild.memberCount} members`,
+      targetId: user.id,
+      targetTag: user.tag,
+    });
   } catch (error) {
     console.warn('[logs] member remove handler failed:', error?.message || error);
   }
@@ -465,7 +641,14 @@ async function handleVoiceStateUpdate(oldState, newState) {
       bodyLines: [userLine, channelLine],
       thumbnailUrl: avatarOf(user),
       titleLine: titleFor('voice', action),
-    }));
+    }), {
+      title: action,
+      description: user
+        ? `${user.tag} · ${(newState.channel || oldState.channel)?.name || 'voice'}`
+        : 'Voice update',
+      targetId: user?.id || member?.id || null,
+      targetTag: user?.tag || null,
+    });
   } catch (error) {
     console.warn('[logs] voice handler failed:', error?.message || error);
   }
@@ -474,6 +657,7 @@ async function handleVoiceStateUpdate(oldState, newState) {
 module.exports = {
   getLogChannel,
   handleGuildBanAdd,
+  handleGuildBanRemove,
   handleGuildMemberAdd,
   handleGuildMemberRemove,
   handleGuildMemberUpdate,

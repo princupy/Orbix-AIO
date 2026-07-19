@@ -19,6 +19,7 @@ const {
   listBadWords,
   updateAutomodConfig,
 } = require('../supabase/automod');
+const { isModuleEnabled } = require('../supabase/modules');
 
 const AUTOMOD_DELETE_CUSTOM_ID_PREFIX = 'automod:delete:';
 const NOTICE_DELETE_MS = 6000;
@@ -500,6 +501,10 @@ async function applyAutomodAction({
 
 async function processAutomodMessage(message) {
   if (!message.guild || message.author.bot || message.system) {
+    return { acted: false };
+  }
+
+  if (!(await isModuleEnabled(message.guild.id, 'automod'))) {
     return { acted: false };
   }
 

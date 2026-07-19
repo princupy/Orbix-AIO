@@ -17,6 +17,7 @@ const { handleMessageCreate } = require('./handlers/messageCreate');
 const { storeDeletedMessage } = require('./handlers/snipeStore');
 const {
   handleGuildBanAdd,
+  handleGuildBanRemove,
   handleGuildMemberAdd,
   handleGuildMemberRemove,
   handleGuildMemberUpdate,
@@ -26,6 +27,9 @@ const {
 } = require('./utils/logs');
 const { handleAutoroleMemberAdd } = require('./utils/autoroles');
 const { handleWelcomeMemberAdd } = require('./utils/welcome');
+const { initDashboardBridge, pushGuildStats } = require('./dashboard/bridge');
+const { startDashboardBackend } = require('./dashboard/backendProcess');
+const { startAnalyticsTasks } = require('./supabase/analytics');
 
 const token = process.env.DISCORD_TOKEN;
 
@@ -109,6 +113,10 @@ const client = new Client({
 
 const musicManager = require('./utils/music').initializeMusic(client);
 require('./utils/musicUi').attachMusicUi(musicManager);
+// Optionally launch the dashboard backend on this same host (before the bridge
+// connects to it). Controlled by START_DASHBOARD_BACKEND in the bot's .env.
+startDashboardBackend();
+initDashboardBridge(client);
 
 loadCommands(client);
 
@@ -169,6 +177,9 @@ client.once(Events.ClientReady, (readyClient) => {
   console.log(`Command categories: ${formatCommandCategoryCounts(readyClient.commands)}`);
   console.log(`Presence: ${BOT_PRESENCE.status} / ${BOT_PRESENCE.activityType} ${BOT_PRESENCE.activityText}`);
 
+  // Begin dashboard analytics recording (message flush + member snapshots).
+  startAnalyticsTasks(readyClient);
+
   cleanupLeftGuildSettings(readyClient.guilds.cache.map((guild) => guild.id))
     .then((result) => {
       if (result.ok && result.removed > 0) {
@@ -201,14 +212,20 @@ client.on(Events.GuildBanAdd, (ban) => {
   handleGuildBanAdd(ban);
 });
 
+client.on(Events.GuildBanRemove, (ban) => {
+  handleGuildBanRemove(ban);
+});
+
 client.on(Events.GuildMemberAdd, (member) => {
   handleGuildMemberAdd(member);
   handleAutoroleMemberAdd(member);
   handleWelcomeMemberAdd(member);
+  pushGuildStats(member.guild);
 });
 
 client.on(Events.GuildMemberRemove, (member) => {
   handleGuildMemberRemove(member);
+  pushGuildStats(member.guild);
 });
 
 client.on(Events.GuildMemberUpdate, (oldMember, newMember) => {

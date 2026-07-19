@@ -10,6 +10,8 @@ const { getAfk, isAfk, removeAfk } = require('./afkStore');
 const { getGuildPrefix } = require('../supabase/guildSettings');
 const { getMediaOnlyChannelIds } = require('../supabase/mediaOnlyChannels');
 const { isNoPrefixUser } = require('../supabase/noPrefixUsers');
+const { isModuleEnabled, moduleForCategory } = require('../supabase/modules');
+const { recordCommandUsage, recordMessageActivity } = require('../supabase/analytics');
 const { createNoticeContainer, cv2Payload } = require('../utils/cv2');
 const { processAutomodMessage } = require('../utils/automod');
 const { processLevelingMessage } = require('../utils/leveling');
@@ -202,6 +204,10 @@ async function relayMentionedMediaOnlyMessage(message) {
 }
 
 async function enforceMediaOnlyMessage(message) {
+  if (!(await isModuleEnabled(message.guild.id, 'media'))) {
+    return false;
+  }
+
   const mediaOnlyChannelIds = await getMediaOnlyChannelIds(message.guild.id);
   const isMediaOnly = mediaOnlyChannelIds.has(message.channel.id);
 
@@ -478,6 +484,9 @@ async function handleMessageCreate(client, message) {
     return;
   }
 
+  // Buffer this message for dashboard analytics (in-memory, flushed on a timer).
+  recordMessageActivity(message.guild.id);
+
   // AutoMod runs first: if a message violates a filter it is removed/punished and
   // no further processing (commands, leveling, AFK) happens for that message.
   try {
@@ -562,6 +571,15 @@ async function handleMessageCreate(client, message) {
   const isAfkCommand = resolvedCommand.resolvedName === 'afk';
   await processAfk(message, isAfkCommand);
 
+  // Feature-module gate: if this command's module is turned off from the
+  // dashboard, silently ignore the command. Core categories (utility, config,
+  // owner, setup-roles) map to no module and are never gated.
+  const commandModuleKey = moduleForCategory(resolvedCommand.command.category);
+
+  if (commandModuleKey && !(await isModuleEnabled(message.guild.id, commandModuleKey))) {
+    return;
+  }
+
   // Wrap message so all command replies/sends show a timeout notice after COMMAND_TIMEOUT_MS.
   // Commands with noTimeout: true are excluded (e.g. help — it has persistent interactive components).
   const timedMessage = resolvedCommand.command.noTimeout
@@ -577,6 +595,9 @@ async function handleMessageCreate(client, message) {
       prefix,
       usedPrefix: hasPrefix ? prefix : '',
     });
+
+    // Record successful command usage for dashboard analytics (fire-and-forget).
+    recordCommandUsage(message.guild.id, resolvedCommand.resolvedName, message.author.id);
   } catch (error) {
     console.error(`Command failed: ${resolvedCommand.resolvedName}`, error);
 

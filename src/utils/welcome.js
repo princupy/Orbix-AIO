@@ -10,6 +10,7 @@ const {
 const emojis = require('../emojis');
 const { cv2Payload } = require('./cv2');
 const { getWelcomeConfig } = require('../supabase/welcome');
+const { isModuleEnabled } = require('../supabase/modules');
 
 const DEFAULT_WELCOME_MESSAGE = 'Welcome {user} to **{server}**! You are our **{membercount}**th member. 🎉';
 const MESSAGE_MAX_LENGTH = 1500;
@@ -110,6 +111,10 @@ async function handleWelcomeMemberAdd(member) {
     const { guild, user } = member;
 
     if (!guild || !user || user.bot) {
+      return;
+    }
+
+    if (!(await isModuleEnabled(guild.id, 'welcome'))) {
       return;
     }
 

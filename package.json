@@ -19,7 +19,8 @@
     "discord.js": "^14.26.4",
     "dotenv": "^17.4.2",
     "sharp": "^0.34.5",
-    "shoukaku": "4.3.0"
+    "shoukaku": "4.3.0",
+    "socket.io-client": "^4.8.3"
   },
   "devDependencies": {
     "ts-node": "^10.9.2",

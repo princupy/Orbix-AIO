@@ -1,0 +1,44 @@
+# Render Blueprint for the Orbix dashboard backend (the bot stays on your bot host;
+# the frontend stays on Vercel). Optional: you can also configure this service by
+# hand in the Render dashboard. Values marked `sync: false` are set in the
+# Render dashboard (they are secrets, never committed).
+services:
+  - type: web
+    name: orbix-dashboard-backend
+    runtime: node
+    plan: free
+    rootDir: dashboard/backend
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Auto-generated strong secret for signing dashboard session JWTs.
+      - key: JWT_SECRET
+        generateValue: true
+      # Discord application (same app as the bot).
+      - key: DISCORD_CLIENT_ID
+        sync: false
+      - key: DISCORD_CLIENT_SECRET
+        sync: false
+      - key: DISCORD_BOT_TOKEN
+        sync: false
+      - key: BOT_OWNER_IDS
+        sync: false
+      # Shared secret the bot uses to connect to this backend's /bot namespace.
+      - key: BOT_BRIDGE_SECRET
+        sync: false
+      # Supabase (same project as the bot).
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      # Public URLs (fill after you know your Render + Vercel URLs).
+      - key: FRONTEND_URL
+        sync: false
+      - key: BACKEND_URL
+        sync: false
+      - key: DISCORD_REDIRECT_URI
+        sync: false
